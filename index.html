@@ -202,6 +202,14 @@
   .item .acts{display:flex;gap:5px;flex-wrap:wrap;}
   .inv-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;}
   .inv-head .cap{color:var(--dim);font-size:12px;}
+  .discard-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .discard-row select,.discard-row input{
+    background:var(--panel);border:1px solid var(--line);border-radius:6px;
+    color:var(--text);padding:6px 8px;font-size:13px;outline:none;min-width:0;
+  }
+  .discard-row select{flex:1;}
+  .discard-row input{width:90px;}
+  .discard-row select:focus,.discard-row input:focus{border-color:var(--accent);}
 
   .facility{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:9px 0;border-bottom:1px dashed #1e2a24;}
   .facility:last-child{border-bottom:none;}

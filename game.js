@@ -436,7 +436,7 @@ const SAVE_KEY = 'moshi_canxiang_save_v1';
 const SETTINGS_KEY = 'moshi_canxiang_settings_v1';
 const ACHIEVE_KEY = 'moshi_canxiang_achieve_v1';
 const SLOT_KEYS = { auto: SAVE_KEY, s1: SAVE_KEY + '_s1', s2: SAVE_KEY + '_s2', s3: SAVE_KEY + '_s3' };
-const GAME_VERSION = '1.4.1';
+const GAME_VERSION = '1.4.2';
 
 /* ==================== 季节 / 进化 / 成就 ==================== */
 
@@ -3300,6 +3300,19 @@ function renderInventory() {
       <div class="acts">${itemActions(p.inventory, id, { n, spoil }, false)}</div>
     </div>`).join('');
   const over = totalWeight(p.inventory) > carryCap(p);
+  const discardHtml = list.length ? `
+    <div class="card" style="margin-top:12px;">
+      <div class="card-title">🗑 丢弃物品</div>
+      <div class="discard-row">
+        <select id="discardItem" onchange="discardItemChanged()">
+          ${list.map(({ id, n }) => `<option value="${id}">${escapeHtml(itemName(id))}（持有 ×${n}）</option>`).join('')}
+        </select>
+        <input id="discardQty" type="number" min="1" max="${list[0].n}" value="1">
+        <button class="btn small" onclick="discardSetMax()">全部</button>
+        <button class="btn small danger" onclick="confirmDiscard()">丢弃</button>
+      </div>
+      <div class="hint" style="color:var(--dim);font-size:12px;margin-top:7px;">先选择物品、再填数量。点击「丢弃」后会再次向你确认，确认后物品无法找回。</div>
+    </div>` : '';
   const trunkHtml = S.world.vehicle ? `
     <div class="card" style="margin-top:12px;">
       <div class="card-title">🚙 ${escapeHtml(S.world.vehicle.name)} 后备箱（${Math.round(trunkWeight())}/60 kg）</div>
@@ -3314,7 +3327,41 @@ function renderInventory() {
   $('tabContent').innerHTML = `
     <div class="view-head"><h3>背包</h3><span class="sub">负重 ${totalWeight(p.inventory)} / ${carryCap(p)} kg${over ? ' <span style="color:var(--bad)">（超重！行动会受限）</span>' : ''} · 现金 ¥${Math.round(p.money)}</span></div>
     ${items ? `<div class="item-grid">${items}</div>` : '<p style="color:var(--dim)">背包空空如也。你得尽快找到食物和水。</p>'}
+    ${discardHtml}
     ${trunkHtml}`;
+}
+
+function discardItemChanged() {
+  const id = $('discardItem').value;
+  const max = countInv(S.player.inventory, id);
+  const qtyInput = $('discardQty');
+  qtyInput.max = max;
+  if (parseInt(qtyInput.value, 10) > max) qtyInput.value = max;
+}
+
+function discardSetMax() {
+  const id = $('discardItem').value;
+  const max = countInv(S.player.inventory, id);
+  $('discardQty').value = max;
+}
+
+function confirmDiscard() {
+  const id = $('discardItem').value;
+  const held = countInv(S.player.inventory, id);
+  if (held <= 0) { toast('背包里没有这个物品。'); renderAll(); return; }
+  const qty = Math.max(1, Math.min(held, parseInt($('discardQty').value, 10) || 0));
+  const name = escapeHtml(itemName(id));
+  openModal('🗑 确认丢弃', `
+    <p class="narrative">你确定要丢弃 <b>${name} × ${qty}</b> 吗？</p>
+    <p class="narrative">丢弃后物品将永久消失，无法找回。</p>`,
+    `<button class="btn danger" onclick="doDiscard('${id}', ${qty})">确定丢弃</button>
+     <button class="btn" onclick="closeModal()">再想想</button>`);
+}
+
+function doDiscard(id, qty) {
+  if (!removeItem(S.player.inventory, id, qty)) { toast('数量有变，丢弃失败。'); closeModal(); return; }
+  addLog(`你丢弃了【${itemName(id)}】×${qty}。`, 'info');
+  closeModal();
 }
 
 function equipWeapon(id) {
