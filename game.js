@@ -436,7 +436,7 @@ const SAVE_KEY = 'moshi_canxiang_save_v1';
 const SETTINGS_KEY = 'moshi_canxiang_settings_v1';
 const ACHIEVE_KEY = 'moshi_canxiang_achieve_v1';
 const SLOT_KEYS = { auto: SAVE_KEY, s1: SAVE_KEY + '_s1', s2: SAVE_KEY + '_s2', s3: SAVE_KEY + '_s3' };
-const GAME_VERSION = '1.4.2';
+const GAME_VERSION = '1.5.0';
 
 /* ==================== 季节 / 进化 / 成就 ==================== */
 
