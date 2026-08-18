@@ -1432,7 +1432,7 @@ function scoutArea() {
   const nearby = Object.entries(S.world.locations).filter(([id]) => LOC_DEFS[id].travel <= 2);
   for (const [id, loc] of nearby) {
     const def = LOC_DEFS[id];
-    const z = loc.zombieCount;
+    const z = Math.round(loc.zombieCount);
     let zt = z === 0 ? '没有丧尸的痕迹' : z < 5 ? `零星的丧尸（约${z}）` : z < 12 ? `成群的丧尸（约${z}）` : `大群丧尸（约${z}）`;
     if (p.ability === 'danger') zt = `精确感知：约 ${z} 只丧尸`;
     info.push(`<b>${def.name}</b>：${zt}${loc.survivors.length ? '，有幸存者活动的迹象' : ''}${specialText(def) ? '，' + specialText(def) : ''}`);
@@ -3258,7 +3258,7 @@ function renderActions() {
     cards.push(actionCard('⛽', '抽取燃油', '启动油泵抽取地下油库的燃油，每次约 5–10 桶。油泵的轰鸣声很可能引来大群丧尸。', 'extractFuel()', '消耗 2 个时段'));
   }
   if (loc.zombieCount > 0 && loc.zombieCount <= 6) {
-    cards.push(actionCard('⚔️', '清理周围的丧尸', `这里大约有 ${loc.zombieCount} 只丧尸，主动清剿可以减少威胁。`, `startEncounter('${locId}', { origin: '${locId}' })`, '战斗有风险'));
+    cards.push(actionCard('⚔️', '清理周围的丧尸', `这里大约有 ${Math.round(loc.zombieCount)} 只丧尸，主动清剿可以减少威胁。`, `startEncounter('${locId}', { origin: '${locId}' })`, '战斗有风险'));
   }
   cards.push(actionCard('🔭', '侦察周围', '观察附近地点的丧尸与幸存者动向。', 'scoutArea()', '消耗 1 个时段'));
   if (!S.base && loc.danger < 1.5 && loc.zombieCount <= 2) {
@@ -3281,8 +3281,8 @@ function renderActions() {
   if (hasPersonalRadio()) cards.push(actionCard('📻', '通讯系统', '联系阵营接任务、指派营地成员代送、问候认识的人。', 'openRadio()'));
   if (hasRadio()) cards.push(actionCard('📡', '收听广播', '了解世界动向与各方势力。', 'listenRadio()'));
 
-  let dangerText = loc.zombieCount === 0 ? '这里似乎很安静。' : loc.zombieCount < 5 ? `有零星丧尸出没（约 ${loc.zombieCount} 只）。` : `丧尸很多（约 ${loc.zombieCount} 只），务必小心。`;
-  if (S.player.ability === 'danger' && loc.zombieCount > 0) dangerText = `危险感知：约 ${loc.zombieCount} 只丧尸在附近游荡。`;
+  let dangerText = loc.zombieCount === 0 ? '这里似乎很安静。' : loc.zombieCount < 5 ? `有零星丧尸出没（约 ${Math.round(loc.zombieCount)} 只）。` : `丧尸很多（约 ${Math.round(loc.zombieCount)} 只），务必小心。`;
+  if (S.player.ability === 'danger' && loc.zombieCount > 0) dangerText = `危险感知：约 ${Math.round(loc.zombieCount)} 只丧尸在附近游荡。`;
   const html = `
     <div class="view-head"><h3>行动</h3><span class="sub">你现在在【${def.name}】。${dangerText}</span></div>
     <div class="card">
