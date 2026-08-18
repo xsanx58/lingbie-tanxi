@@ -12,6 +12,11 @@
 
 const PHASES = ['清晨', '白天', '黄昏', '夜晚'];
 const PHASE_EMOJI = ['🌅', '☀️', '🌇', '🌙'];
+const PHASE_CLOCK = ['06:00', '12:00', '18:00', '22:00'];
+
+function phaseClock() {
+  return `${PHASE_EMOJI[S.world.phase]} ${PHASES[S.world.phase]} ${PHASE_CLOCK[S.world.phase]}`;
+}
 
 const WORLD_STAGES = [
   { name: '异常期', desc: '社会尚在运转，大多数人还不知道灾难将至。' },
@@ -337,6 +342,7 @@ const FACILITIES = {
   barn:      { name: '鸡舍',     icon: '🐔', desc: '养鸡产蛋，稳定补充少量食物。', req: { 木板: 3, 种子: 1 }, days: 1 },
   farm:      { name: '农场',     icon: '🌾', desc: '种植农作物：一键浇水（自来水无限），肥料可加速。', req: { 种子: 4, 木板: 4, 金属: 2 }, days: 2 },
   ranch:     { name: '牧场',     icon: '🐄', desc: '养殖牲畜：一键喂水（自来水无限），饲料可加速。', req: { 木板: 4, 金属: 2, 零件: 1 }, days: 2 },
+  gym:       { name: '健身房',   icon: '🏋️', desc: '每天最多锻炼 4 次，每次提升 1kg 负重上限。', req: { 金属: 3, 木板: 2, 零件: 1 }, days: 2 },
   compost:   { name: '堆肥桶',   icon: '🪣', desc: '把食物投入桶中，发酵 2 个时段后变成肥料。', req: { 木板: 2, 金属: 1 }, days: 1 },
   school:    { name: '学堂',     icon: '📚', desc: '提升士气，让下一代重新学习知识。', req: { 木板: 2, 金属: 1 }, days: 2 },
   lab:       { name: '病毒实验室', icon: '🧪', desc: '研究疫苗的核心设施，解药主线的关键。', req: { 金属: 2, 零件: 3, 电线: 2, 工具组: 1 }, days: 2 }
@@ -475,7 +481,7 @@ const SAVE_KEY = 'moshi_canxiang_save_v1';
 const SETTINGS_KEY = 'moshi_canxiang_settings_v1';
 const ACHIEVE_KEY = 'moshi_canxiang_achieve_v1';
 const SLOT_KEYS = { auto: SAVE_KEY, s1: SAVE_KEY + '_s1', s2: SAVE_KEY + '_s2', s3: SAVE_KEY + '_s3' };
-const GAME_VERSION = '1.7.0';
+const GAME_VERSION = '1.9.0';
 
 /* ==================== 季节 / 进化 / 成就 ==================== */
 
@@ -504,7 +510,7 @@ const ACHIEVEMENTS = [
   { id: 'base', icon: '🏠', name: '安家', desc: '建立第一个安全屋' },
   { id: 'recruit10', icon: '👥', name: '十人小队', desc: '团队达到 10 人' },
   { id: 'city', icon: '🏙', name: '新城市', desc: '基地人口达到 60' },
-  { id: 'npcall', icon: '🧭', name: '群像', desc: '结识全部 22 位特殊人物' },
+  { id: 'npcall', icon: '🧭', name: '群像', desc: '结识全部 50 位特殊人物' },
   { id: 'arc10', icon: '📖', name: '十段人生', desc: '完成 10 条人物支线' },
   { id: 'cure', icon: '🧬', name: '解药', desc: '完成解药主线' },
   { id: 'car', icon: '🚙', name: '座驾', desc: '获得第一辆车' },
@@ -619,6 +625,7 @@ function makeSpecialNpcs() {
     npc.inv = inv;
     npc.favor = t.favorStart;
     npc.met = false;
+    npc.friend = 0;
     npc.location = null;
     npc.recruited = false;
     npc.alive = true;
@@ -626,13 +633,26 @@ function makeSpecialNpcs() {
     npc.quest.done = false;
     npc.quest.progress = false;
     npc.quest.start = 0;
+    if (t.id === 'friday') {
+      npc.met = true;
+      npc.location = 'home';
+    }
     return npc;
   });
 }
 
 function ensureSaveCompat(state) {
   if (!state.world.specialNpcs) state.world.specialNpcs = makeSpecialNpcs();
+  // 老存档补齐新增的特殊人物（如星期五）
+  for (const t of SPECIAL_NPC_TEMPLATES) {
+    if (!state.world.specialNpcs.some(n => n.id === t.id)) {
+      const fresh = makeSpecialNpcs().find(n => n.id === t.id);
+      state.world.specialNpcs.push(fresh);
+    }
+  }
   for (const npc of state.world.specialNpcs) {
+    if (npc.friend === undefined) npc.friend = 0;
+    if (npc.id === 'friday' && npc.met === undefined) { npc.met = true; npc.location = 'home'; }
     const keys = Object.keys(npc.inv || {});
     if (keys.length && typeof npc.inv[keys[0]] === 'number') {
       const inv = {};
@@ -645,6 +665,10 @@ function ensureSaveCompat(state) {
   if (!state.world.flags.acceptedEnding) state.world.flags.acceptedEnding = null;
   for (const loc of Object.values(state.world.locations)) {
     if (!loc.npcs) loc.npcs = [];
+  }
+  const fridayCompat = state.world.specialNpcs.find(n => n.id === 'friday');
+  if (fridayCompat && fridayCompat.alive && !fridayCompat.recruited && fridayCompat.location === 'home' && !state.world.locations.home.npcs.includes('friday')) {
+    state.world.locations.home.npcs.push('friday');
   }
   if (state.base) {
     if (!state.base.crops) state.base.crops = [];
@@ -673,6 +697,9 @@ function ensureSaveCompat(state) {
     for (const f of Object.keys(LEGEND_CHAINS)) state.world.legendChains[f] = { stage: 0, done: false };
   }
   if (state.world.flags.lastNpcCall === undefined) state.world.flags.lastNpcCall = 0;
+  if (state.player.naturalAntibody === undefined) state.player.naturalAntibody = true;
+  if (state.player.carryBonus === undefined) state.player.carryBonus = 0;
+  if (state.player.workoutsToday === undefined) state.player.workoutsToday = 0;
   // 老档补齐：按当前世界天数回溯进化阶段与战争状态
   const e = evolutionOf(state.world.day);
   if (!state.world.flags.evo) {
@@ -721,6 +748,8 @@ function freshState(creation) {
   world.locations = {};
   for (const id of Object.keys(LOC_DEFS)) world.locations[id] = makeLocation(id, creation.startDay);
   world.specialNpcs = makeSpecialNpcs();
+  const friday = world.specialNpcs.find(n => n.id === 'friday');
+  if (friday && !world.locations.home.npcs.includes('friday')) world.locations.home.npcs.push('friday');
   world.flags.endingsAchieved = [];
   world.flags.acceptedEnding = null;
   world.flags.adventure = {};
@@ -756,6 +785,7 @@ function freshState(creation) {
     hunger: 10, thirst: 10, fatigue: 15, temp: 78, mental: 90, morale: 55,
     infection: 0, infectionControlled: false,
     immune: 15 + (body.imm || 0),
+    naturalAntibody: true, carryBonus: 0, workoutsToday: 0,
     skills: {},
     wounds: [],
     effects: [],
@@ -820,6 +850,7 @@ function totalWeight(inv) {
 function carryCap(p) {
   let cap = 14;
   if (countInv(p.inventory, '背包') > 0) cap += ITEMS['背包'].carry;
+  cap += (p.carryBonus || 0);
   return cap;
 }
 function invList(inv) {
@@ -833,7 +864,7 @@ function itemName(id) {
 /* ==================== 日志 ==================== */
 
 function addLog(text, cls) {
-  const t = `${fmtTime(S.world.day)} ${PHASES[S.world.phase]}`;
+  const t = `${fmtTime(S.world.day)} ${PHASES[S.world.phase]} ${PHASE_CLOCK[S.world.phase]}`;
   log.unshift({ t, text, cls: cls || 'info' });
   if (log.length > 500) log.pop();
   if (ENC) {
@@ -930,6 +961,7 @@ function combatPower(p) {
 function gainInfection(amount, source) {
   const p = S.player;
   let v = amount;
+  if (p.naturalAntibody) v *= 0.55; // 主角天生带有特异抗体，感染上升更慢
   v *= clamp(1 - p.immune / 110, 0.4, 1);
   if (p.ability === 'heal') v *= 0.6;
   p.infection = clamp(p.infection + v, 0, 100);
@@ -1173,9 +1205,11 @@ function dailyInfectionTick() {
   const p = S.player;
   if (p.infection <= 0 || p.infectionControlled) return;
   let growth = 2.2 + rand(0, 2.6);
+  // 主角的特异抗体：感染会缓慢自行回落，而不是持续恶化
+  if (p.naturalAntibody) growth -= 5.5;
   if (p.effects.includes('antibiotic')) {
-    growth -= 9;
-    addLog('抗生素压制了体内的病毒。', 'good');
+    growth -= 11;
+    addLog('抗生素配合你的特异抗体，正在剿灭体内的病毒。', 'good');
   }
   if (p.ability === 'heal') growth *= 0.6;
   if (S.base && S.base.locId === S.world.location && hasFacility('medbay')) {
@@ -1187,9 +1221,10 @@ function dailyInfectionTick() {
   }
   growth *= clamp(1 - p.immune / 140, 0.72, 1);
   p.infection = clamp(p.infection + growth, 0, 100);
-  if (p.infection > 0) addLog(`感染在体内蔓延（当前 ${Math.round(p.infection)}%）。`, 'bad');
+  if (p.infection > 0 && growth > 0) addLog(`感染在体内蔓延（当前 ${Math.round(p.infection)}%）。`, 'bad');
+  if (p.infection > 0 && growth < 0) addLog(`你的身体正在压制病毒（当前 ${Math.round(p.infection)}%）。`, 'good');
   if (p.infection >= 100) return die('病毒彻底侵蚀了你的身体，你变成了它们的一员。');
-  if (p.infection < 18 && p.immune > 45 && chance(0.12)) {
+  if (p.infection < 18 && p.immune > 45 && chance(0.18)) {
     p.infectionControlled = true;
     addLog('奇迹般地，你的身体压制住了病毒。感染暂时稳定了下来。', 'good');
     S.world.history.push(`${fmtTime(S.world.day)}：${p.name} 控制住了体内的感染。`);
@@ -1237,6 +1272,7 @@ function dailyAbilityTick() {
 function newDay() {
   S.world.day++;
   const p = S.player;
+  p.workoutsToday = 0;
   S.world.stat.daysSurvived++;
   rollWeather();
   zombieDrift();
@@ -2068,6 +2104,18 @@ function establishBase() {
   loc.zombieCount = 0;
   loc.danger = 0;
   addLog(`你在【${def.name}】建立了一个安全屋。从此，你有了一个可以回去的地方。`, 'good');
+  // 开局伙伴「星期五」：若在破旧公寓建立基地，他会主动加入并守家
+  const friday = S.world.specialNpcs.find(n => n.id === 'friday');
+  if (friday && friday.alive && !friday.recruited && S.world.location === 'home') {
+    const sv = npcToSurvivor(friday);
+    sv.role = 'guard';
+    friday.recruited = true;
+    friday.attitude = 'friendly';
+    S.base.population.push(sv);
+    const homeLoc = S.world.locations.home;
+    homeLoc.npcs = homeLoc.npcs.filter(x => x !== 'friday');
+    addLog(`【同伴】${friday.name} 早就说过要守好这个家。现在，他正式成了这里的守卫。`, 'good');
+  }
   S.world.history.push(`${fmtTime(S.world.day)}：${p.name} 在${def.name}建立了第一个安全屋。`);
   addTag('定居者');
   checkAch();
@@ -2191,7 +2239,22 @@ function useMed(itemId) {
   }
   if (def.antibiotic) {
     p.effects.push('antibiotic');
-    addLog('你服下了抗生素，感染被暂时压制。', 'good');
+    p.infection = clamp(p.infection - randInt(12, 22), 0, 100);
+    addLog('你服下了抗生素，体内的病毒被大量清除。', 'good');
+    if (p.infection <= 0) {
+      p.infectionControlled = true;
+      addLog('感染被彻底清除了！你的特异抗体帮助身体恢复了健康。', 'good');
+    }
+  }
+  if (def.disinfect) {
+    p.infection = clamp(p.infection - randInt(6, 12), 0, 100);
+    if (p.wounds.some(w => !w.treated)) {
+      p.wounds.forEach(w => { if (!w.treated) w.treated = true; });
+      addLog('你用消毒剂清洗了伤口，感染风险下降。', 'good');
+    } else {
+      addLog('你用消毒剂擦拭了身体，感觉安心了不少。', 'info');
+    }
+    if (p.infection <= 0) p.infectionControlled = true;
   }
   if (def.painkiller) {
     p.morale = clamp(p.morale + 5, 0, 100);
@@ -2388,6 +2451,23 @@ function baseDaily() {
   if (!b) return;
   buildProgressDaily();
   const pop = b.population.filter(n => n.alive);
+  // 开局伙伴「星期五」：状态尚可时会主动外出搜集建材、水和食物
+  const friday = pop.find(n => n.specialId === 'friday');
+  if (friday && friday.health >= 55 && friday.morale >= 30) {
+    if (chance(0.75)) {
+      const found = pick(['木板', '金属', '零件', '瓶装水', '净水', '罐头', '压缩饼干']);
+      const qty = randInt(1, 2);
+      addItem(b.inv, found, qty);
+      addLog(`【同伴】${friday.name} 外出归来，带回了【${itemName(found)}】×${qty}，已放入仓库。`, 'good');
+    }
+    if (chance(0.10)) {
+      friday.health = clamp(friday.health - randInt(5, 12), 0, 100);
+      addLog(`【同伴】${friday.name} 搜寻时受了点轻伤。`, 'warn');
+    }
+  } else if (friday && friday.health < 55) {
+    npcRestAtBase(friday);
+    addLog(`【同伴】${friday.name} 有伤在身，正在基地养伤，没有出门。`, 'info');
+  }
   // 在基地的成员不使用随身背包，物资统一回仓库
   for (const n of pop) {
     if (n.role !== 'scavenge' && !isCourierAway(n.id)) npcReturnToBase(n, false);
@@ -2422,14 +2502,32 @@ function baseDaily() {
     }
   }
 
-  // 拾荒者外出
+  // 拾荒者 / 有探索任务的 NPC 外出
   for (const sv of pop.filter(n => n.role === 'scavenge')) {
+    // 状态不好就自行返回养伤，不硬撑
+    if (sv.health < 45 || sv.morale < 20) {
+      sv.mission = sv.mission ? { ...sv.mission, done: true } : null;
+      sv.role = 'idle';
+      addLog(`【团队】${sv.name} 状态不佳，主动折返基地休整，没有硬撑到任务完成。`, 'warn');
+      npcReturnToBase(sv);
+      continue;
+    }
     npcPackForTrip(sv, 1);
     npcConsumeTrip(sv);
-    if (chance(0.65)) {
-      const id = pick(['罐头', '压缩饼干', '瓶装水', '木板', '金属', '零件', '燃油']);
+    const mission = sv.mission && !sv.mission.done ? sv.mission : null;
+    const targetPool = mission && mission.targets.length ? mission.targets : ['罐头', '压缩饼干', '瓶装水', '木板', '金属', '零件', '燃油', '电池'];
+    if (chance(0.7)) {
+      const id = pick(targetPool);
       addItem(b.inv, id, randInt(1, 2));
-      addLog(`【团队】${sv.name} 外出拾荒，带回了【${id}】，已放入仓库。`, 'good');
+      addLog(`【团队】${sv.name} 外出${mission ? '执行任务' : '拾荒'}，带回了【${itemName(id)}】，已放入仓库。`, 'good');
+    }
+    if (mission) {
+      mission.tripDays = (mission.tripDays || 0) + 1;
+      if (mission.tripDays >= 3) {
+        mission.done = true;
+        sv.role = 'idle';
+        addLog(`【团队】${sv.name} 完成了这次探索任务，回基地休息。`, 'good');
+      }
     }
     if (chance(0.15)) {
       const wid = pick(['菜刀', '棒球棍', '撬棍', '长矛', '铁管']);
@@ -2448,6 +2546,23 @@ function baseDaily() {
       }
     }
     npcReturnToBase(sv);
+  }
+
+  // 待命成员没有任务时会自行出门探索（有伤或状态差则留在基地）
+  for (const sv of pop.filter(n => n.role === 'idle' && !isCourierAway(n.id))) {
+    if (sv.health < 60 || sv.morale < 35) {
+      npcRestAtBase(sv);
+      continue;
+    }
+    if (chance(0.45)) {
+      const id = pick(['木板', '金属', '零件', '瓶装水', '罐头', '压缩饼干', '电池', '种子']);
+      addItem(b.inv, id, randInt(1, 2));
+      addLog(`【团队】闲不住的 ${sv.name} 自己出门转了一圈，带回了【${itemName(id)}】。`, 'info');
+      if (chance(0.08)) {
+        sv.health = clamp(sv.health - randInt(6, 16), 0, 100);
+        addLog(`【团队】${sv.name} 出门时受了点小伤。`, 'warn');
+      }
+    }
   }
 
   // 人口消耗
@@ -2505,6 +2620,31 @@ function npcEvents() {
   const b = S.base;
   const pop = b.population.filter(n => n.alive);
   if (!pop.length) return;
+  // 基地成员外出时可能结识其他幸存者，关系好会带回来
+  if (chance(0.25)) {
+    const unrec = S.world.specialNpcs.filter(n => n.alive && !n.recruited);
+    if (unrec.length) {
+      const target = pick(unrec);
+      const scout = pick(pop.filter(n => n.health >= 50 && n.role !== 'medic'));
+      if (scout && !target.friend && !target.recruited) {
+        target.friend = target.friend || 0;
+        target.friend += randInt(8, 16);
+        target.met = true;
+        if (!target.location) target.location = S.base.locId;
+        addLog(`【团队】${scout.name} 在外结识了 ${target.name}，两人聊得很投机。`, 'info');
+        if (target.friend >= 60) {
+          const sv = npcToSurvivor(target);
+          target.recruited = true;
+          b.population.push(sv);
+          const loc = S.world.locations[target.location];
+          if (loc) loc.npcs = loc.npcs.filter(x => x !== target.id);
+          addLog(`【团队】${target.name} 被 ${scout.name} 带回了基地，加入了我们！`, 'good');
+          S.world.history.push(`${fmtTime(S.world.day)}：${scout.name} 把 ${target.name} 带回了基地。`);
+          checkAch();
+        }
+      }
+    }
+  }
   if (chance(0.35)) {
     const n = pick(pop);
     const type = pick(['ill', 'conflict', 'love', 'request', 'growth', 'theft']);
@@ -2632,6 +2772,121 @@ function npcHeal(id) {
   npc.health = clamp(npc.health + 22, 0, 100);
   npc.loyalty = clamp(npc.loyalty + 5, 0, 100);
   addLog(`你为 ${npc.name} 处理了伤口。`, 'good');
+  closeModal();
+  renderAll();
+}
+
+/* ==================== NPC 管理扩展 ==================== */
+
+function npcManage(npcId) {
+  const npc = S.base ? S.base.population.find(n => n.id === npcId) : null;
+  if (!npc) return;
+  const invRows = invList(npc.inv || {}).length
+    ? invList(npc.inv || {}).map(x => `<div class="row"><span class="k">${itemName(x.id)}</span><span class="v">×${x.n}</span></div>`).join('')
+    : '<p class="narrative" style="color:var(--dim);">身上没有携带物资。</p>';
+  const mission = npc.mission && !npc.mission.done
+    ? `<div class="row"><span class="k">当前探索任务</span><span class="v">${npc.mission.targets.map(t => itemName(t)).join('、') || '任意物资'}</span></div>` : '';
+  openModal(`📋 ${escapeHtml(npc.name)}`,
+    `<p class="narrative">${escapeHtml(npc.name)} · ${escapeHtml(npc.profession)} · ${ROLES.find(r => r.id === npc.role).name}</p>
+     <div class="row"><span class="k">生命</span><span class="v">${Math.round(npc.health)} / 100</span></div>
+     <div class="row"><span class="k">士气</span><span class="v">${Math.round(npc.morale)} / 100</span></div>
+     <div class="row"><span class="k">忠诚</span><span class="v">${Math.round(npc.loyalty)} / 100</span></div>
+     <div class="row"><span class="k">武器</span><span class="v">${npcWeaponName(npc)}</span></div>
+     ${mission}
+     <div class="card-title" style="margin:12px 0 6px;">🎒 随身物品</div>
+     ${invRows}`,
+    `<button class="choice" onclick="npcEquipMenu('${npc.id}')"><span class="t">🔫 装备 / 更换武器</span><span class="d">从基地仓库给他/她配武器</span></button>
+     <button class="choice" onclick="npcUnequip('${npc.id}')"><span class="t">🙌 卸下武器</span><span class="d">武器会放回基地仓库</span></button>
+     <button class="choice" onclick="npcMissionMenu('${npc.id}')"><span class="t">🎯 安排探索任务</span><span class="d">指定要搜寻的资源，可多选</span></button>
+     <button class="choice" onclick="talkToNpc('${npc.id}')"><span class="t">💬 谈话</span></button>
+     <button class="btn" onclick="closeModal()">返回</button>`);
+}
+
+function npcEquipMenu(npcId) {
+  const npc = S.base.population.find(n => n.id === npcId);
+  if (!npc || !S.base) return;
+  const weapons = invList(S.base.inv).filter(x => x.def.cat === 'weapon' || x.def.cat === 'gun');
+  if (!weapons.length) {
+    openModal('🔫 装备武器', '<p class="narrative">基地仓库里没有可以装备的武器。</p>', '<button class="btn" onclick="npcManage(\'' + npcId + '\')">返回</button>');
+    return;
+  }
+  const list = weapons.map(x => `<div class="facility">
+    <div><div class="n">${itemName(x.id)}</div><div class="d">伤害 ${x.def.dmg || 0}${x.def.ammo ? ` · 需要${itemName(x.def.ammo)}` : ''}</div></div>
+    <button class="btn small" onclick="npcEquip('${npcId}', '${x.id}')">装备</button>
+  </div>`).join('');
+  openModal('🔫 装备武器',
+    `<p class="narrative">从基地仓库里为 ${escapeHtml(npc.name)} 挑选武器（换下的旧武器会放回仓库）。</p><div style="margin-top:8px;">${list}</div>`,
+    '<button class="btn" onclick="npcManage(\'' + npcId + '\')">返回</button>');
+}
+
+function npcEquip(npcId, weaponId) {
+  const npc = S.base.population.find(n => n.id === npcId);
+  if (!npc || !S.base || countInv(S.base.inv, weaponId) <= 0) { toast('仓库里没有这件武器。'); return; }
+  removeItem(S.base.inv, weaponId, 1);
+  if (npc.weapon) addItem(S.base.inv, npc.weapon, 1);
+  npc.weapon = weaponId;
+  addLog(`【团队】${npc.name} 装备了【${itemName(weaponId)}】。`, 'good');
+  npcManage(npcId);
+}
+
+function npcUnequip(npcId) {
+  const npc = S.base.population.find(n => n.id === npcId);
+  if (!npc || !S.base) return;
+  if (!npc.weapon) { toast('他/她本来就没带武器。'); return; }
+  addItem(S.base.inv, npc.weapon, 1);
+  const old = npc.weapon;
+  npc.weapon = null;
+  addLog(`【团队】${npc.name} 卸下了【${itemName(old)}】，放回了基地仓库。`, 'info');
+  npcManage(npcId);
+}
+
+const NPC_MISSION_RESOURCES = ['瓶装水', '罐头', '压缩饼干', '木板', '金属', '零件', '电线', '燃油', '绷带', '抗生素', '种子', '电池'];
+
+function npcMissionMenu(npcId) {
+  const npc = S.base.population.find(n => n.id === npcId);
+  if (!npc) return;
+  const sel = (npc.mission && npc.mission.targets) || [];
+  const list = NPC_MISSION_RESOURCES.map(id => {
+    const checked = sel.includes(id);
+    return `<button class="btn small ${checked ? 'primary' : ''}" onclick="npcMissionToggle('${npcId}', '${id}')">${checked ? '✅ ' : ''}${itemName(id)}</button>`;
+  }).join(' ');
+  openModal('🎯 安排探索任务',
+    `<p class="narrative">让 ${escapeHtml(npc.name)} 出门搜寻指定的物资。可多选；不选则自行寻找任何有用的东西。</p>
+     <p class="narrative" style="color:var(--warn);margin-top:8px;">状态不佳时他/她会自行提前返回基地养伤，命比物资重要。</p>
+     <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;">${list}</div>`,
+    `<button class="btn primary" onclick="npcMissionStart('${npcId}')">出发探索</button>
+     <button class="btn" onclick="npcMissionClear('${npcId}')">清空任务</button>
+     <button class="btn" onclick="npcManage('${npcId}')">返回</button>`);
+}
+
+function npcMissionToggle(npcId, resId) {
+  const npc = S.base.population.find(n => n.id === npcId);
+  if (!npc) return;
+  npc.mission = npc.mission || { targets: [], done: false };
+  const i = npc.mission.targets.indexOf(resId);
+  if (i >= 0) npc.mission.targets.splice(i, 1);
+  else npc.mission.targets.push(resId);
+  npcMissionMenu(npcId);
+}
+
+function npcMissionStart(npcId) {
+  const npc = S.base.population.find(n => n.id === npcId);
+  if (!npc || !S.base) return;
+  if (npc.health < 45) { toast('他/她的状态太差，不适合出门。先让其在基地养伤。'); return; }
+  npc.mission = { targets: [...(npc.mission?.targets || [])], done: false, tripDays: 0 };
+  npc.role = 'scavenge';
+  const t = npc.mission.targets.length ? npc.mission.targets.map(itemName).join('、') : '任何有用的物资';
+  addLog(`【团队】${npc.name} 出发了，目标是：${t}。`, 'info');
+  closeModal();
+  renderAll();
+}
+
+function npcMissionClear(npcId) {
+  const npc = S.base.population.find(n => n.id === npcId);
+  if (!npc) return;
+  if (npc.mission) npc.mission.done = true;
+  npc.role = 'idle';
+  addLog(`【团队】你取消了 ${npc.name} 的探索任务。`, 'info');
   closeModal();
   renderAll();
 }
@@ -3178,7 +3433,7 @@ function renderAll() {
 function renderHud() {
   if (!S) return;
   $('hudDay').textContent = fmtTime(S.world.day);
-  $('hudPhase').textContent = PHASE_EMOJI[S.world.phase] + ' ' + PHASES[S.world.phase];
+  $('hudPhase').textContent = phaseClock();
   $('hudWeather').textContent = WEATHER_DEFS[S.world.weather].name + ' · ' + SEASONS[seasonOf(S.world.day)].name;
   const def = LOC_DEFS[S.world.location];
   $('hudLocation').textContent = def.name + (S.base && S.base.locId === S.world.location ? '（基地）' : '');
@@ -3482,6 +3737,38 @@ function farmCardHtml() {
   </div>`;
 }
 
+function gymCardHtml() {
+  const b = S.base;
+  const p = S.player;
+  const left = Math.max(0, 4 - (p.workoutsToday || 0));
+  return `<div class="card">
+    <div class="card-title">🏋️ 健身房</div>
+    <div class="row"><span class="k">今日已锻炼</span><span class="v">${p.workoutsToday || 0} / 4 次</span></div>
+    <div class="row"><span class="k">负重上限加成</span><span class="v">+${p.carryBonus || 0} kg</span></div>
+    <div style="margin-top:8px;">
+      <button class="btn small" onclick="workout()" ${left > 0 ? '' : 'disabled'}>锻炼一次（+1kg 负重，消耗 2 时段）</button>
+      ${left > 0 ? `<span style="color:var(--dim);font-size:12px;margin-left:8px;">今天还能练 ${left} 次</span>` : '<span style="color:var(--dim);font-size:12px;margin-left:8px;">今天的训练已经到极限了，明天再来。</span>'}
+    </div>
+  </div>`;
+}
+
+function workout() {
+  const p = S.player;
+  const b = S.base;
+  if (!b || !hasFacility('gym')) { toast('需要先建造健身房。'); return; }
+  if (b.locId !== S.world.location) { toast('回到基地才能锻炼。'); return; }
+  if ((p.workoutsToday || 0) >= 4) { toast('今天已经练了 4 次，身体需要休息。'); return; }
+  if (p.stamina < 10) { toast('太累了，练不动了。'); return; }
+  p.stamina = clamp(p.stamina - 10, 0, 100);
+  p.fatigue = clamp(p.fatigue + 6, 0, 100);
+  p.workoutsToday = (p.workoutsToday || 0) + 1;
+  p.carryBonus = (p.carryBonus || 0) + 1;
+  p.skills.近战 = clamp(p.skills.近战 + 1, 0, 100);
+  addLog(`你在健身房挥汗如雨，负重上限 +1kg（当前 +${p.carryBonus}kg）。`, 'good');
+  advancePhase(2);
+  renderAll();
+}
+
 function ranchCardHtml() {
   const b = S.base;
   const rows = b.livestock.map(l => {
@@ -3574,6 +3861,7 @@ function renderBase() {
     </div>
     ${hasFacility('farm') ? farmCardHtml() : ''}
     ${hasFacility('ranch') ? ranchCardHtml() : ''}
+    ${hasFacility('gym') ? gymCardHtml() : ''}
     ${hasFacility('compost') ? compostCardHtml() : ''}
     <div class="card"><div class="card-title">设施</div>${facilities}</div>
     <div class="card"><div class="card-title">制作</div>${recipes}</div>
@@ -3612,7 +3900,8 @@ function renderTeam() {
             ${ROLES.map(r => `<option value="${r.id}" ${n.role === r.id ? 'selected' : ''}>${r.name}</option>`).join('')}
           </select>
           <button class="btn small" onclick="talkToNpc('${n.id}')">交谈</button>
-          ${n.specialId && !S.world.flags.arcs[n.specialId] ? `<button class="btn small" onclick="npcArcMenu('${n.specialId}')">📖 支线</button>` : ''}
+          <button class="btn small" onclick="npcManage('${n.id}')">管理</button>
+          ${n.specialId && ARC2[n.specialId] && !S.world.flags.arcs[n.specialId] ? `<button class="btn small" onclick="npcArcMenu('${n.specialId}')">📖 支线</button>` : ''}
         </div>
       </div>
     </div>`).join('');
@@ -3620,14 +3909,14 @@ function renderTeam() {
 }
 
 function renderLogFull() {
-  const list = log.map(e => `<div class="log-item ${e.cls}"><span class="t">${e.t}</span>${escapeHtml(e.text)}</div>`).join('');
+  const list = log.map(e => `<div class="log-item ${e.cls}"><span class="t">${e.t}</span> ${escapeHtml(e.text)}</div>`).join('');
   $('tabContent').innerHTML = `<div class="view-head"><h3>日志</h3><span class="sub">这一世走过的路。</span></div>${list || '<p style="color:var(--dim)">暂无记录。</p>'}`;
 }
 
 function renderLogSide() {
   const el = $('logBox');
   if (!el) return;
-  el.innerHTML = log.slice(0, 60).map(e => `<div class="log-item ${e.cls}"><span class="t">${e.t}</span>${escapeHtml(e.text)}</div>`).join('');
+  el.innerHTML = log.slice(0, 60).map(e => `<div class="log-item ${e.cls}"><span class="t">${e.t}</span> ${escapeHtml(e.text)}</div>`).join('');
 }
 
 /* ==================== 弹窗与提示 ==================== */
@@ -3791,6 +4080,7 @@ const CHEAT_STATS = [
   ['cheatMorale', '士气', 'morale', 100],
   ['cheatInfection', '感染', 'infection', 99],
   ['cheatImmune', '免疫力', 'immune', 100],
+  ['cheatCarry', '负重加成（kg）', 'carryBonus', 200],
   ['cheatMoney', '现金（元）', 'money', 9999999]
 ];
 
@@ -4180,6 +4470,28 @@ function showTitle() {
 /* ==================== 奇遇：特殊人物 ==================== */
 
 const SPECIAL_NPC_TEMPLATES = [
+  {
+    id: 'friday', name: '星期五', sex: '男', age: 35, profession: '流浪者',
+    attitude: 'friendly', faction: '独立', favorStart: 70, ability: 'strength',
+    desc: '住在破旧公寓里的壮汉，是你在这片废墟里最先结识的同伴。',
+    story: [
+      '星期五本名没人记得。灾难发生时他正在公寓楼下的便利店打工，从此再没离开过这片街区。',
+      '他像鲁滨逊的星期五一样忠诚而可靠：守住家门、外出拾荒、把水和食物背回屋里，日复一日。',
+      '他说自己不聪明，但知道一件事——在末世里，有一个可以回去的地方，比什么都重要。'
+    ],
+    skills: { 近战: 55, 搜索: 45, 建造: 25, 烹饪: 20, 心理: 15 },
+    inv: { 棒球棍: 1, 瓶装水: 2, 罐头: 2, 木板: 2 },
+    dialog: {
+      low: ['放心吧，家我守着。', '我出去转一圈，天黑前回来。', '水壶我灌满了。'],
+      high: ['跟着你，我心里踏实。', '这地方，我会把它守成家。', '你歇着，我去找点吃的回来。']
+    },
+    quest: {
+      type: 'items', need: { 绷带: 1 }, done: false, progress: false, start: 0,
+      text: '昨天翻栅栏划伤了手。给我 1 个绷带，我还能继续出去搜东西。',
+      doneText: '手没事了。明天我多跑两趟。',
+      reward: { 木板: 3, 瓶装水: 2 }
+    }
+  },
   {
     id: 'shenyanqiu', name: '沈砚秋', sex: '女', age: 32, profession: '军医',
     attitude: 'friendly', faction: '军方残部', favorStart: 25, ability: 'heal',
@@ -4662,6 +4974,622 @@ const SPECIAL_NPC_TEMPLATES = [
       text: '一个重伤员撑不过今晚了。给我 1 个医疗包。',
       doneText: '他挺过来了。谢谢你，也替这世界谢谢你的药。',
       reward: { 抗生素: 2, 维生素: 1 }
+    }
+  },
+  {
+    id: 'yuechangsheng', name: '岳长生', sex: '男', age: 66, profession: '老中医',
+    attitude: 'friendly', faction: '独立', favorStart: 20, ability: 'heal',
+    desc: '背着药篓的老人，在废墟里辨认草药，像认识每一株草。',
+    story: [
+      '岳长生开了一辈子诊所，灾变那天正好上山采药，躲过了城里的第一波混乱。',
+      '他靠着一把药锄和满腹药方活了下来。他说，人吃五谷，药在土里，天无绝人之路。',
+      '他最大的遗憾，是没能把诊所里的那口砂锅带出来——熬了一辈子药，锅比儿子还亲。'
+    ],
+    skills: { 医疗: 62, 搜索: 35, 烹饪: 30, 近战: 18, 心理: 28 },
+    inv: { 抗生素: 1, 维生素: 2, 绷带: 2 },
+    dialog: {
+      low: ['这味药得现采，急不得。', '年轻人，气色不好，是不是没睡够？', '乱世里，身体是本钱。'],
+      high: ['你面相仁厚，是能托付的人。', '我这些方子，总得有人传下去。', '跟我上山，我教你认几味救命草。']
+    },
+    quest: {
+      type: 'items', need: { 维生素: 2 }, done: false, progress: false, start: 0,
+      text: '营地里孩子得了坏血病，给我 2 瓶维生素。',
+      doneText: '孩子们好多了。这片土地会记住你的。',
+      reward: { 医疗包: 1, 抗生素: 1 }
+    }
+  },
+  {
+    id: 'situkong', name: '司徒空', sex: '男', age: 39, profession: '锁匠',
+    attitude: 'neutral', faction: '独立', favorStart: 8, ability: null,
+    desc: '总是眯着眼打量门锁的人，口袋里全是铁丝和小工具。',
+    story: [
+      '司徒空祖传开锁手艺，灾变前专替人开防盗门，灾变后专替人开别人开不了的门。',
+      '他见过太多屋子：有的门后是尸骨，有的门后是宝藏。他说，锁不会撒谎，人会。',
+      '他不跟任何人结盟，但每次离开前，都会给主人家留一把备用钥匙。'
+    ],
+    skills: { 搜索: 55, 机械: 40, 潜行: 35, 近战: 22, 谈判: 20 },
+    inv: { 零件: 3, 工具组: 1, 电池: 2 },
+    dialog: {
+      low: ['有锁，才有安全感。', '别问我怎么进来的，这行有规矩。', '这门锁是坏的，别浪费力气。'],
+      high: ['我信你，比信这把锁多。', '有需要开的门，招呼一声。', '这串钥匙，给你防身。']
+    },
+    quest: {
+      type: 'items', need: { 零件: 2 }, done: false, progress: false, start: 0,
+      text: '我要开一间保险库，还差 2 个零件做工具。',
+      doneText: '门开了。里面有你的一半。',
+      reward: { 工具组: 1, 电池: 3 }
+    }
+  },
+  {
+    id: 'baijingzhi', name: '白静之', sex: '女', age: 30, profession: '小学老师',
+    attitude: 'friendly', faction: '幸存者营地', favorStart: 18, ability: null,
+    desc: '声音温柔的教师，随身带着半盒粉笔和一本没讲完的课本。',
+    story: [
+      '白静之教三年级。灾变那天，她护送二十多个孩子躲进了学校地下室。',
+      '只有九个孩子活了下来。她把他们的名字写在本子上，每天点名，一个都不能少。',
+      '她想重建一间教室，哪怕只有一张黑板、几支粉笔，孩子们也得重新学会“明天”。'
+    ],
+    skills: { 心理: 52, 领导: 35, 烹饪: 30, 搜索: 22, 医疗: 18 },
+    inv: { 种子: 2, 罐头: 2, 瓶装水: 2 },
+    dialog: {
+      low: ['孩子们需要书，也需要希望。', '请不要在孩子们面前动刀。', '我们正在学算术，物资要省着用。'],
+      high: ['孩子们都说你是好人。', '如果有一天学校能重开，请你来当校长。', '谢谢你保护了我们的明天。']
+    },
+    quest: {
+      type: 'items', need: { 种子: 2, 瓶装水: 1 }, done: false, progress: false, start: 0,
+      text: '我想带孩子们种一块菜地，给我 2 包种子和 1 瓶水。',
+      doneText: '发芽了！孩子们高兴坏了。',
+      reward: { 蔬菜: 3, 净水: 2 }
+    }
+  },
+  {
+    id: 'shapi', name: '沙皮', sex: '男', age: 42, profession: '修车师傅',
+    attitude: 'neutral', faction: '商队', favorStart: 12, ability: 'mechanic',
+    desc: '满手油污的修车师傅，躺在地上看车底比站着还精神。',
+    story: [
+      '沙皮开了二十年修车铺，什么车到他手里都能再跑三年。',
+      '灾变后车成了命根子。他修过的车救了很多人，也载过很多逃不掉的人。',
+      '他总说，只要轮子还在转，人就还没输。'
+    ],
+    skills: { 机械: 68, 驾驶: 45, 电力: 35, 近战: 25, 搜索: 25 },
+    inv: { 零件: 4, 工具组: 1, 燃油: 1 },
+    dialog: {
+      low: ['车比人好伺候。', '这车再开下去要散架。', '没有零件，神仙也没辙。'],
+      high: ['你的车，我包了。', '能一起跑长途的，都是过命的交情。', '有空我教你认发动机。']
+    },
+    quest: {
+      type: 'items', need: { 零件: 3, 燃油: 1 }, done: false, progress: false, start: 0,
+      text: '有辆能装货的卡车需要大修，给我 3 个零件和 1 桶燃油。',
+      doneText: '发动机响了，比什么都好听。',
+      reward: { 零件: 4, 燃油: 2 }
+    }
+  },
+  {
+    id: 'huasan', name: '花三娘', sex: '女', age: 47, profession: '餐馆老板娘',
+    attitude: 'friendly', faction: '商队', favorStart: 22, ability: null,
+    desc: '嗓门洪亮的老板娘，颠勺的胳膊比很多男人的腿还结实。',
+    story: [
+      '花三娘的餐馆曾是街坊食堂。灾变后，她支起一口大锅，把剩菜煮成了求生汤。',
+      '她说，人再难，也得吃口热乎的；锅里有油腥，心里才不慌。',
+      '她救过很多人，只收一句“谢谢”。她说，这世道，人情比金子值钱。'
+    ],
+    skills: { 烹饪: 65, 谈判: 35, 近战: 30, 领导: 25, 搜索: 20 },
+    inv: { 罐头: 3, 玉米: 2, 土豆: 2, 菜刀: 1 },
+    dialog: {
+      low: ['想吃热乎的，得先有米下锅。', '别嫌难吃，这年头有口粮就不错。', '锅还在，日子就还在。'],
+      high: ['来，今天给你开小灶。', '你这孩子，比我家那小子还让人心疼。', '以后这儿就是你家食堂。']
+    },
+    quest: {
+      type: 'items', need: { 罐头: 3 }, done: false, progress: false, start: 0,
+      text: '我想办一场“百家饭”，还差 3 个罐头。',
+      doneText: '那顿饭，很多人吃着吃着就哭了。',
+      reward: { 罐头: 4, 玉米: 3 }
+    }
+  },
+  {
+    id: 'wenjiren', name: '闻寄人', sex: '男', age: 36, profession: '电台主持',
+    attitude: 'neutral', faction: '守望者教会', favorStart: 10, ability: null,
+    desc: '声音低沉的夜间电台主持，随身带着一台老式录音机。',
+    story: [
+      '闻寄人灾变前主持午夜情感节目，倾听过这座城市无数的秘密。',
+      '现在他依然每晚开播，只是听众从失恋的人，变成了废墟里躲藏的幸存者。',
+      '他说，只要还有一个人守着收音机，这座城市就还没有真正死去。'
+    ],
+    skills: { 心理: 55, 谈判: 35, 搜索: 30, 电力: 25, 近战: 15 },
+    inv: { 收音机: 1, 电池: 3, 净水: 1 },
+    dialog: {
+      low: ['今晚的节目，讲一个关于“等”的故事。', '如果你听到，请回一句“还活着”。', '信号越来越差了。'],
+      high: ['你的故事，我想录下来。', '有人在听你说话，别放弃。', '这世界需要你的声音。']
+    },
+    quest: {
+      type: 'items', need: { 电池: 3 }, done: false, progress: false, start: 0,
+      text: '电台快没电了，给我 3 节电池，今晚还能继续播。',
+      doneText: '今晚的听众，比昨天多了三个人。',
+      reward: { 收音机: 1, 电池: 2 }
+    }
+  },
+  {
+    id: 'quegu', name: '雀姑', sex: '女', age: 52, profession: '养蜂人',
+    attitude: 'friendly', faction: '守望者教会', favorStart: 25, ability: 'farmer',
+    desc: '戴着纱网帽的养蜂人，她说蜜蜂比人更早知道世界要变。',
+    story: [
+      '雀姑在山里养了三十年蜜蜂。灾变前一周，蜂群突然成片死去，她连夜下了山。',
+      '她靠蜂箱里的存蜜和授粉的果树活了下来。她说，蜜蜂死了，花期乱了，人不能也乱。',
+      '她想再养一箱蜂。只要有花开，蜜蜂就会回来；有蜜蜂，荒地也能重新结出果子。'
+    ],
+    skills: { 种植: 55, 烹饪: 35, 搜索: 35, 心理: 30, 医疗: 15 },
+    inv: { 种子: 3, 维生素: 1, 鸡蛋: 2 },
+    dialog: {
+      low: ['蜂箱得离人群远一点。', '这附近没什么花了。', '甜的东西，最抚人心。'],
+      high: ['等花开的时候，分你一罐蜜。', '你身上有土地的味道。', '种东西要耐心，像养蜂一样。']
+    },
+    quest: {
+      type: 'items', need: { 种子: 3 }, done: false, progress: false, start: 0,
+      text: '我要种一片花田引蜜蜂回来，给我 3 包种子。',
+      doneText: '第一朵花开了，蜜蜂真的来了。',
+      reward: { 蔬菜: 3, 种子: 2 }
+    }
+  },
+  {
+    id: 'dushi', name: '杜石', sex: '男', age: 56, profession: '石匠',
+    attitude: 'neutral', faction: '独立', favorStart: 8, ability: null,
+    desc: '沉默的石匠，用钢钎在废墟上刻下一座小小的界碑。',
+    story: [
+      '杜石刻了一辈子碑。灾变后，他给死去的人刻碑，给还活着的人刻路标。',
+      '他说，石头不会骗人。名字刻上去，就有人记得。',
+      '他在自己出生的巷口刻下：“有人生于此，有人死于此，有人还在这里。”'
+    ],
+    skills: { 建造: 55, 近战: 40, 搜索: 25, 心理: 20, 医疗: 10 },
+    inv: { 木板: 3, 金属: 2, 工具组: 1 },
+    dialog: {
+      low: ['别碰我的錾子。', '这块石头，我要带走。', '生死有命，碑不能乱刻。'],
+      high: ['若我先走，碑你替我刻。', '你这人，命硬。', '给我讲讲外面的事。']
+    },
+    quest: {
+      type: 'items', need: { 金属: 2 }, done: false, progress: false, start: 0,
+      text: '我要给营地立一块界碑，还差 2 块金属。',
+      doneText: '碑立起来了。以后这里就是我们的地界。',
+      reward: { 木板: 4, 金属: 2 }
+    }
+  },
+  {
+    id: 'qiyue', name: '祁月', sex: '女', age: 24, profession: '小提琴手',
+    attitude: 'friendly', faction: '独立', favorStart: 15, ability: 'calm',
+    desc: '背着小提琴盒的年轻乐手，琴弓上缠着防滑的布条。',
+    story: [
+      '祁月是音乐学院的学生。灾变那晚，她在音乐厅演出，直到谢幕才发现世界已经变了。',
+      '她背着琴走了很远。琴声曾在尸群逼近时给过人们勇气，也曾在长夜里让哭泣的人睡着。',
+      '她想找到其他乐手。她说，等一切结束后，要在这座城市的废墟上开一场音乐会。'
+    ],
+    skills: { 心理: 45, 搜索: 25, 烹饪: 20, 近战: 15, 谈判: 30 },
+    inv: { 罐头: 2, 净水: 1, 维生素: 1 },
+    dialog: {
+      low: ['琴得省着拉，弓毛不多了。', '你想听什么？', '音乐救不了命，但能救心。'],
+      high: ['我为你写了一段曲子。', '你让我想起台上那些鼓掌的人。', '以后每个平安夜，我都拉琴给你听。']
+    },
+    quest: {
+      type: 'items', need: { 维生素: 1, 净水: 1 }, done: false, progress: false, start: 0,
+      text: '有位老人病倒了，给我 1 瓶维生素和 1 瓶净水。',
+      doneText: '他睁开眼睛了。谢谢你救了他。',
+      reward: { 罐头: 3, 维生素: 1 }
+    }
+  },
+  {
+    id: 'hongdou', name: '红豆', sex: '女', age: 26, profession: '护士',
+    attitude: 'neutral', faction: '企业避难所', favorStart: 10, ability: 'heal',
+    desc: '温柔内敛的护士，袖口总是卷得整整齐齐。',
+    story: [
+      '红豆在急诊室工作。灾变后，避难所收留了她，条件是永远不追问病人的下落。',
+      '她见过太多“被隔离”的人。终于有一天，她放走了一个本该被带走的孩子。',
+      '她逃了出来，心里装着愧疚，也装着那个孩子塞给她的一颗糖。'
+    ],
+    skills: { 医疗: 58, 心理: 35, 搜索: 25, 烹饪: 20, 近战: 12 },
+    inv: { 绷带: 3, 抗生素: 1, 瓶装水: 1 },
+    dialog: {
+      low: ['别问避难所的事。', '让我看看你的伤口。', '我不喜欢被称作“白衣天使”。'],
+      high: ['那个孩子，我救对了。', '你想重建一个没有“隔离区”的地方吗？', '我跟你走。']
+    },
+    quest: {
+      type: 'items', need: { 抗生素: 1 }, done: false, progress: false, start: 0,
+      text: '有个孩子伤口感染了，给我 1 支抗生素。',
+      doneText: '烧退了。他终于肯笑了。',
+      reward: { 医疗包: 1, 绷带: 2 }
+    }
+  },
+  {
+    id: 'tiexiao', name: '铁枭', sex: '男', age: 45, profession: '押运员',
+    attitude: 'hostile', faction: '掠夺者', favorStart: 0, ability: 'strength',
+    desc: '脸上有疤的押运员，怀里永远揣着一把短刀。',
+    story: [
+      '铁枭灾变前押运现金，枪不离身，从不相信任何人。',
+      '灾变后，他加入掠夺者，因为那里“规矩简单”：谁拳头大谁说了算。',
+      '他曾经救过一个孤儿，后来那个孤儿偷走了他全部的家当。从此他更冷了。'
+    ],
+    skills: { 近战: 60, 远程: 40, 驾驶: 35, 搜索: 30, 谈判: 10 },
+    inv: { 砍刀: 1, 手枪弹: 6, 罐头: 1 },
+    dialog: {
+      low: ['滚远点。', '你的命，不值我一颗子弹。', '这地方我占了。'],
+      high: ['你……和他们不一样。', '拳头可以分你一半。', '要是谁敢动你，先问过我。']
+    },
+    quest: {
+      type: 'kill', need: 8, done: false, progress: false, start: 0,
+      text: '帮我清掉 8 只挡路的丧尸，我欠你一次。',
+      doneText: '干得漂亮。掠夺者认强者。',
+      reward: { 砍刀: 1, 手枪弹: 8 }
+    }
+  },
+  {
+    id: 'tongmou', name: '佟眸', sex: '女', age: 29, profession: '摄影师',
+    attitude: 'neutral', faction: '独立', favorStart: 12, ability: null,
+    desc: '脖子上挂着相机的女摄影师，总在废墟里寻找“值得留下的瞬间”。',
+    story: [
+      '佟眸拍了十年纪实。灾变后，她把镜头对准了废墟、幸存者和每一场告别。',
+      '她的硬盘里存了几千张照片。她说，等有人能重新冲洗照片的那天，这就是人类的证据。',
+      '她很少拍自己，因为“拿相机的人不该出现在故事里”。'
+    ],
+    skills: { 搜索: 40, 心理: 30, 潜行: 35, 谈判: 25, 近战: 15 },
+    inv: { 电池: 2, 维生素: 1, 净水: 1 },
+    dialog: {
+      low: ['别挡着光。', '我想拍下你的背影，可以吗？', '有些画面，看一眼就忘不了。'],
+      high: ['你是我拍过最好看的主角。', '等世界好起来，我给你办一场展览。', '这些照片里，该有你一张。']
+    },
+    quest: {
+      type: 'items', need: { 电池: 2 }, done: false, progress: false, start: 0,
+      text: '相机快没电了，给我 2 节电池，我还想再拍几张。',
+      doneText: '这一卷，拍到了最珍贵的东西。',
+      reward: { 收音机: 1, 电池: 1 }
+    }
+  },
+  {
+    id: 'mowen', name: '墨文', sex: '男', age: 34, profession: '程序员',
+    attitude: 'neutral', faction: '企业避难所', favorStart: 10, ability: null,
+    desc: '戴着眼镜的程序员，背包里全是硬盘和线路板。',
+    story: [
+      '墨文灾变前是架构师。灾变后，他做的第一件事是给避难所搭建了一套内部网络。',
+      '后来他发现，这套网络被用来监控和“清理”感染者。他删掉了核心数据，砸了服务器。',
+      '他带着最后一块硬盘逃了出来，里面是避难所的罪证，也是一段加密的真相。'
+    ],
+    skills: { 电力: 60, 科研: 40, 机械: 30, 搜索: 30, 近战: 12 },
+    inv: { 零件: 3, 电线: 3, 电池: 2 },
+    dialog: {
+      low: ['数据不会说谎。', '别碰我的硬盘。', '有些代码，写出来就回不了头了。'],
+      high: ['硬盘的解密密钥，我交给你。', '你懂什么叫“重启世界”吗？', '我想写一套新的系统，给人用的那种。']
+    },
+    quest: {
+      type: 'items', need: { 电线: 2 }, done: false, progress: false, start: 0,
+      text: '我要搭一台能解密硬盘的机器，还差 2 根电线。',
+      doneText: '真相解开了。比我想的更黑。',
+      reward: { 零件: 4, 电池: 2 }
+    }
+  },
+  {
+    id: 'yanluo', name: '燕萝', sex: '女', age: 21, profession: '花艺师',
+    attitude: 'friendly', faction: '独立', favorStart: 18, ability: null,
+    desc: '在废墟里种花的少女，她说花比枪更能让一座城活过来。',
+    story: [
+      '燕萝的花店在灾变中塌了。她捡回几包种子，沿路撒在墙角、井边、纪念碑旁。',
+      '有人说她傻。她却说，人看到花，才会想起自己还是人。',
+      '她梦想开一家新花店，不收钱，只收故事。'
+    ],
+    skills: { 种植: 45, 心理: 35, 烹饪: 25, 搜索: 30, 近战: 10 },
+    inv: { 种子: 4, 蔬菜: 2, 净水: 1 },
+    dialog: {
+      low: ['这朵花送给你。', '种子不多，要撒在看得见的地方。', '你看，它还活着。'],
+      high: ['我把最美的花种都给你。', '你的营地，会开满花的。', '等春天来，我们一起种。']
+    },
+    quest: {
+      type: 'items', need: { 净水: 2 }, done: false, progress: false, start: 0,
+      text: '我的花快渴死了，给我 2 瓶净水。',
+      doneText: '它们活过来了，像在谢谢你。',
+      reward: { 种子: 3, 蔬菜: 2 }
+    }
+  },
+  {
+    id: 'heiqiu', name: '黑球', sex: '男', age: 38, profession: '矿工',
+    attitude: 'neutral', faction: '独立', favorStart: 8, ability: null,
+    desc: '沉默寡言的矿工，一身腱子肉，攥着把磨损的镐头。',
+    story: [
+      '黑球在井下干了二十年。灾变时他正上夜班，是矿洞里最后一批出来的人。',
+      '他亲眼看着工友一个个倒下，最后只带出来一把镐头和半壶水。',
+      '他说，井下比地上安静。可他还是回来了，因为地上还有活着的人。'
+    ],
+    skills: { 近战: 50, 建造: 40, 搜索: 35, 机械: 25, 心理: 15 },
+    inv: { 金属: 3, 木板: 2, 工具组: 1 },
+    dialog: {
+      low: ['井下见多了，地上算啥。', '给我个方向，我凿穿它。', '别碰我的镐。'],
+      high: ['跟你干活，痛快。', '这堵墙，明天就给你拆了。', '兄弟，井下出来的人，惜命。']
+    },
+    quest: {
+      type: 'items', need: { 木板: 3 }, done: false, progress: false, start: 0,
+      text: '我想给工友立个墓，还差 3 块木板。',
+      doneText: '墓立好了。他们终于不用再下井了。',
+      reward: { 金属: 3, 工具组: 1 }
+    }
+  },
+  {
+    id: 'luofeng', name: '骆风', sex: '男', age: 49, profession: '茶商',
+    attitude: 'friendly', faction: '商队', favorStart: 20, ability: null,
+    desc: '带着半车茶叶的老茶商，逢人就问“要不要换口茶喝”。',
+    story: [
+      '骆风做了一辈子茶叶生意。灾变后，粮食金贵，他的茶叶却成了稀罕物。',
+      '他用茶叶换情报、换路、换人情。他说，茶是水里的火，能暖身子，也能暖人心。',
+      '他最大的心愿，是回到南方的茶山，看看那片祖传的茶园还在不在。'
+    ],
+    skills: { 谈判: 55, 领导: 35, 烹饪: 25, 搜索: 30, 近战: 18 },
+    inv: { 瓶装水: 3, 罐头: 2, 维生素: 1 },
+    dialog: {
+      low: ['茶凉了，心不能凉。', '生意讲信用，乱世更得讲。', '换不换，一句话。'],
+      high: ['这饼老茶，送你了。', '跟你做生意，痛快。', '等茶山通了，我请你去喝头采。']
+    },
+    quest: {
+      type: 'items', need: { 瓶装水: 2 }, done: false, progress: false, start: 0,
+      text: '我的茶快焙坏了，给我 2 瓶水救急。',
+      doneText: '茶香回来了。你是识货的人。',
+      reward: { 罐头: 3, 维生素: 1 }
+    }
+  },
+  {
+    id: 'anxi', name: '安溪', sex: '女', age: 35, profession: '兽医',
+    attitude: 'friendly', faction: '幸存者营地', favorStart: 22, ability: 'herder',
+    desc: '背着药箱的兽医，身边总跟着一条瘸腿的狗。',
+    story: [
+      '安溪是宠物医院的兽医。灾变后，人医稀缺，她的技术意外地救了不少人和牲畜。',
+      '她收留了一条被炸断腿的牧羊犬，取名“三脚”。狗跟着她走南闯北，从不掉队。',
+      '她说，动物比人诚实。你对它好，它把命给你。'
+    ],
+    skills: { 医疗: 50, 种植: 30, 搜索: 35, 心理: 30, 近战: 20 },
+    inv: { 绷带: 2, 维生素: 1, 罐头: 1 },
+    dialog: {
+      low: ['三脚说，你不是坏人。', '别喂它奇怪的东西。', '动物能提前察觉危险。'],
+      high: ['三脚很喜欢你。', '我的药箱，愿意分你一半。', '如果有牧场，我来管。']
+    },
+    quest: {
+      type: 'items', need: { 绷带: 2 }, done: false, progress: false, start: 0,
+      text: '三脚又伤了，给我 2 个绷带。',
+      doneText: '它又能跑了。它说谢谢你。',
+      reward: { 医疗包: 1, 维生素: 1 }
+    }
+  },
+  {
+    id: 'guzheng', name: '顾筝', sex: '女', age: 31, profession: '天文学家',
+    attitude: 'neutral', faction: '企业避难所', favorStart: 10, ability: null,
+    desc: '总是抬头看天的女学者，说星空是灾难后唯一没变的东西。',
+    story: [
+      '顾筝在远郊天文台工作。灾变后，避难所收编了她，想用卫星数据规划“安全区”。',
+      '她发现避难所故意隐瞒了几条撤离路线。她把数据记在星图上，连夜出逃。',
+      '她说，人类几千年来都靠星星认路。这一次，星星也会带人们回家。'
+    ],
+    skills: { 科研: 55, 电力: 30, 搜索: 30, 心理: 30, 近战: 10 },
+    inv: { 电池: 2, 零件: 2, 维生素: 1 },
+    dialog: {
+      low: ['今晚有流星。', '天上的星星，比地上的规矩可靠。', '别问我数据的事。'],
+      high: ['我把星图给你。', '北斗七星，永远指着回家的方向。', '你是这片夜空下，我能相信的人。']
+    },
+    quest: {
+      type: 'items', need: { 电池: 2 }, done: false, progress: false, start: 0,
+      text: '我的定位仪没电了，给我 2 节电池。',
+      doneText: '信号恢复了。撤离路线都在这里。',
+      reward: { 收音机: 1, 电池: 2 }
+    }
+  },
+  {
+    id: 'muchen', name: '穆尘', sex: '男', age: 27, profession: '文物修复师',
+    attitude: 'neutral', faction: '守望者教会', favorStart: 12, ability: null,
+    desc: '戴着白手套的修复师，在废墟里收集每一块有故事的碎片。',
+    story: [
+      '穆尘修了五年壁画。灾变后，他抢救出博物馆里最珍贵的几件文物。',
+      '他说，文明不是高楼，是这些被小心保存的东西——哪怕一块碎瓷，也值得被记住。',
+      '他想建一座“废墟博物馆”，把捡到的碎片都放进去，让后来人知道世界曾经的样子。'
+    ],
+    skills: { 科研: 40, 心理: 35, 搜索: 40, 建造: 25, 近战: 15 },
+    inv: { 电池: 1, 旧衣服: 1, 维生素: 1 },
+    dialog: {
+      low: ['轻一点，它们很脆弱。', '每一块碎片都有故事。', '别用世俗的眼光看它们。'],
+      high: ['这块碎片，和你很配。', '等博物馆建成，第一块展品写你的名字。', '你懂“保存”的意义。']
+    },
+    quest: {
+      type: 'items', need: { 旧衣服: 2 }, done: false, progress: false, start: 0,
+      text: '我需要布料包文物，给我 2 件旧衣服。',
+      doneText: '包好了。它们终于安全了。',
+      reward: { 种子: 2, 维生素: 1 }
+    }
+  },
+  {
+    id: 'yecha', name: '夜叉', sex: '女', age: 33, profession: '格斗教练',
+    attitude: 'hostile', faction: '掠夺者', favorStart: 0, ability: 'strength',
+    desc: '目光锐利的格斗教练，指节上缠着破旧绷带。',
+    story: [
+      '夜叉是地下格斗场的冠军。灾变后，拳头成了最硬的通行证。',
+      '她替掠夺者“收账”，从不废话。但她从不打小孩，也从不抢老人的粮。',
+      '她说，拳头是用来活命的，不是用来作恶的——这两条线，她分得很清。'
+    ],
+    skills: { 近战: 72, 潜行: 35, 搜索: 25, 心理: 20, 远程: 15 },
+    inv: { 棒球棍: 1, 止痛药: 2, 罐头: 1 },
+    dialog: {
+      low: ['想挨揍吗？', '这里不欢迎你。', '我只看实力。'],
+      high: ['你身上有股硬气。', '改天，我们堂堂正正打一场。', '跟着你，至少不用做亏心事。']
+    },
+    quest: {
+      type: 'kill', need: 10, done: false, progress: false, start: 0,
+      text: '杀 10 只丧尸证明自己，否则别想让我正眼看你。',
+      doneText: '不错。你有资格和我说话。',
+      reward: { 棒球棍: 1, 止痛药: 3 }
+    }
+  },
+  {
+    id: 'lingxi', name: '灵犀', sex: '女', age: 20, profession: '学生',
+    attitude: 'friendly', faction: '幸存者营地', favorStart: 15, ability: 'danger',
+    desc: '总是一惊一乍的少女，耳朵却出奇地灵。',
+    story: [
+      '灵犀天生听觉超常，能听出很远处的脚步声。灾变前，这让她在学校里显得格格不入。',
+      '灾变后，她的耳朵成了救命的本事。她听过尸群逼近的声音，也听过废墟里微弱的呼救。',
+      '她不再害怕自己的“怪耳朵”。她说，这是上天给她的礼物。'
+    ],
+    skills: { 潜行: 40, 搜索: 40, 心理: 30, 近战: 15, 烹饪: 20 },
+    inv: { 能量饮料: 1, 维生素: 1, 电池: 1 },
+    dialog: {
+      low: ['嘘——别出声，有东西。', '我听见了，那边有水声。', '相信我，我的耳朵不会错。'],
+      high: ['我听见你的心跳了，很稳。', '跟着你，我睡得最踏实。', '以后我来当你的“雷达”。']
+    },
+    quest: {
+      type: 'items', need: { 能量饮料: 1 }, done: false, progress: false, start: 0,
+      text: '我好几天没睡好了，给我 1 瓶能量饮料提神。',
+      doneText: '精神多了！我听见了新的动静。',
+      reward: { 电池: 2, 维生素: 1 }
+    }
+  },
+  {
+    id: 'baoyi', name: '鲍一', sex: '男', age: 44, profession: '渔船船长',
+    attitude: 'neutral', faction: '独立', favorStart: 8, ability: null,
+    desc: '皮肤黝黑的船长，说话带着海风的味道。',
+    story: [
+      '鲍一在海上漂了半辈子。灾变后，他开着渔船往返江岸，救人、运货、打渔。',
+      '他说，陆地上的人互相提防，江上的人却只有一条船那么大的地方，必须信得过彼此。',
+      '他的船在一次尸潮中被烧了。他发誓，要攒够材料再造一艘更大的。'
+    ],
+    skills: { 驾驶: 55, 搜索: 40, 近战: 30, 烹饪: 25, 机械: 20 },
+    inv: { 金属: 2, 零件: 2, 罐头: 2 },
+    dialog: {
+      low: ['陆地上待久了，我晕。', '有鱼汛了，可惜没船。', '江风比枪声干净。'],
+      high: ['等船造好，带你去江心钓鱼。', '你这人，像老水手，靠得住。', '我这条命，欠你的。']
+    },
+    quest: {
+      type: 'items', need: { 金属: 2, 零件: 2 }, done: false, progress: false, start: 0,
+      text: '造船还差 2 块金属和 2 个零件。',
+      doneText: '船龙骨立起来了！有船，就有活路。',
+      reward: { 金属: 3, 罐头: 2 }
+    }
+  },
+  {
+    id: 'chanxin', name: '禅心', sex: '男', age: 58, profession: '僧人',
+    attitude: 'friendly', faction: '守望者教会', favorStart: 20, ability: 'calm',
+    desc: '慈眉善目的老僧，一串佛珠磨得发亮。',
+    story: [
+      '禅心师父在城郊小庙修行。灾变后，他敞开庙门，收留所有逃难的人。',
+      '庙里的粮食很快见了底，他却说：“把最后一碗粥分出去，庙才是庙。”',
+      '他说自己不怕死，只怕人在死前，忘了自己为什么活着。'
+    ],
+    skills: { 心理: 60, 医疗: 25, 烹饪: 30, 搜索: 25, 近战: 10 },
+    inv: { 净水: 2, 罐头: 1, 旧衣服: 2 },
+    dialog: {
+      low: ['施主，心安即是家。', '今日的苦难，是明日的功课。', '莫怕，众生皆苦，也皆可渡。'],
+      high: ['你与佛有缘。', '这串佛珠，送与你保平安。', '你做的，是菩萨事。']
+    },
+    quest: {
+      type: 'items', need: { 净水: 1, 罐头: 1 }, done: false, progress: false, start: 0,
+      text: '有位施主在发热，给我 1 瓶净水和 1 个罐头。',
+      doneText: '他醒了，直念阿弥陀佛。',
+      reward: { 维生素: 2, 旧衣服: 2 }
+    }
+  },
+  {
+    id: 'jingzhe', name: '荆辙', sex: '男', age: 32, profession: '赛车手',
+    attitude: 'neutral', faction: '商队', favorStart: 12, ability: null,
+    desc: '戴着破损头盔的赛车手，谈起引擎眼睛就发亮。',
+    story: [
+      '荆辙曾是最有前途的年轻车手。灾变后，他的赛车变成了运货和逃命的工具。',
+      '他开车穿过尸群，像在赛道上一样精准。他说，速度是末世里最奢侈的自由。',
+      '他梦想有一天，能在清理干净的公路上，再痛痛快快跑一场。'
+    ],
+    skills: { 驾驶: 65, 机械: 35, 近战: 30, 搜索: 25, 谈判: 15 },
+    inv: { 燃油: 2, 零件: 2, 能量饮料: 1 },
+    dialog: {
+      low: ['系好安全带，我要加速了。', '这车，没劲。', '别碰方向盘。'],
+      high: ['副驾驶给你留着。', '等路通了，我教你漂移。', '跟你跑长途，不亏。']
+    },
+    quest: {
+      type: 'items', need: { 燃油: 2 }, done: false, progress: false, start: 0,
+      text: '我的车快没油了，给我 2 桶燃油。',
+      doneText: '满油了！风都在身后追我。',
+      reward: { 零件: 3, 能量饮料: 1 }
+    }
+  },
+  {
+    id: 'xianhe', name: '仙鹤', sex: '女', age: 40, profession: '裁缝',
+    attitude: 'friendly', faction: '幸存者营地', favorStart: 18, ability: null,
+    desc: '针线不离手的裁缝，能把破布拼成保暖的衣服。',
+    story: [
+      '仙鹤开了二十年裁缝铺。灾变后，她发现一件好衣服能救命：保暖、耐磨、能藏东西。',
+      '她给幸存者补衣服，从没收过钱。她说，人穿上像样的衣服，才有“人样”。',
+      '她最大的心愿，是给营地里每个孩子做一件过冬的棉衣。'
+    ],
+    skills: { 建造: 35, 心理: 35, 烹饪: 30, 搜索: 30, 近战: 15 },
+    inv: { 旧衣服: 3, 羊毛: 1, 罐头: 1 },
+    dialog: {
+      low: ['你衣服破了，我给你补。', '天冷了，得添衣裳。', '针脚要密，人心要实。'],
+      high: ['我给你量身做一件。', '这手艺，总算没白学。', '营地的孩子，都念叨你。']
+    },
+    quest: {
+      type: 'items', need: { 旧衣服: 2 }, done: false, progress: false, start: 0,
+      text: '我要给孩子们做棉衣，还差 2 件旧衣服。',
+      doneText: '孩子们穿上新棉衣，像一群小鸟。',
+      reward: { 羊毛: 2, 旧衣服: 2 }
+    }
+  },
+  {
+    id: 'kuangtu', name: '狂徒', sex: '男', age: 37, profession: '拳手',
+    attitude: 'hostile', faction: '掠夺者', favorStart: 0, ability: 'strength',
+    desc: '满身旧伤的地下拳手，把“不服就干”挂在嘴边。',
+    story: [
+      '狂徒打了一辈子黑拳。灾变后，拳头让他活了下来，也让他失去了一切。',
+      '他其实怕疼，也怕死，只是从没让人看出来。',
+      '他总说，这世道欠他一场“堂堂正正的比赛”，没有裁判，没有暗箱，只有拳头和命。'
+    ],
+    skills: { 近战: 70, 潜行: 25, 搜索: 25, 心理: 15, 远程: 10 },
+    inv: { 铁管: 1, 止痛药: 2, 罐头: 1 },
+    dialog: {
+      low: ['要动手就动手，别废话。', '你这样的，我能打十个。', '滚！'],
+      high: ['你够种。', '这世道，敢跟掠夺者叫板的人不多。', '我跟你干，但别把我当狗使。']
+    },
+    quest: {
+      type: 'kill', need: 12, done: false, progress: false, start: 0,
+      text: '陪我杀 12 只丧尸，让我看看你是不是只会耍嘴皮子。',
+      doneText: '痛快！你是个能打的。',
+      reward: { 铁管: 1, 止痛药: 3 }
+    }
+  },
+  {
+    id: 'yulan', name: '玉兰', sex: '女', age: 50, profession: '图书管理员',
+    attitude: 'neutral', faction: '守望者教会', favorStart: 15, ability: null,
+    desc: '说话轻声细语的管理员，怀里抱着几本舍不得丢的书。',
+    story: [
+      '玉兰在图书馆工作了一辈子。灾变后，她把还能抢救的书搬进了教堂地下室。',
+      '她说，书是文明的种子。只要还有人在读，人类就没有真正回到蛮荒。',
+      '她教孩子们识字。第一课，她教他们写“人”字。'
+    ],
+    skills: { 科研: 35, 心理: 45, 烹饪: 25, 搜索: 30, 近战: 10 },
+    inv: { 种子: 1, 旧衣服: 1, 维生素: 1 },
+    dialog: {
+      low: ['小声点，这里像图书馆。', '书要轻拿轻放。', '孩子们需要纸和笔。'],
+      high: ['这本《鲁滨逊漂流记》，送给你。', '你让我相信，文明能重建。', '等一切过去，来图书馆找我。']
+    },
+    quest: {
+      type: 'items', need: { 旧衣服: 2 }, done: false, progress: false, start: 0,
+      text: '书受潮了，给我 2 件旧衣服擦干它们。',
+      doneText: '书都救回来了。谢谢你。',
+      reward: { 维生素: 2, 种子: 2 }
+    }
+  },
+  {
+    id: 'fangge', name: '方歌', sex: '男', age: 28, profession: '外卖骑手',
+    attitude: 'friendly', faction: '独立', favorStart: 16, ability: null,
+    desc: '骑着破旧电动车的外卖骑手，头盔上还贴着笑脸贴纸。',
+    story: [
+      '方歌灾变时正在送最后一单外卖。那单没送到，他却把车骑成了逃命工具。',
+      '他对这座城市的大街小巷了如指掌，哪条巷子能抄近路，他闭着眼都知道。',
+      '他总说，送餐和求生其实是一回事：快、准、别绕路。'
+    ],
+    skills: { 搜索: 50, 驾驶: 40, 潜行: 30, 近战: 20, 谈判: 20 },
+    inv: { 罐头: 2, 瓶装水: 1, 电池: 1 },
+    dialog: {
+      low: ['这单不好送。', '前面有尸群，绕城西路。', '我的电瓶快没电了。'],
+      high: ['你对这片街区挺熟？那咱俩是同行。', '以后你要去哪，我给你当“活地图”。', '这头盔送你，保个平安。']
+    },
+    quest: {
+      type: 'items', need: { 电池: 2 }, done: false, progress: false, start: 0,
+      text: '车没电了，给我 2 节电池。',
+      doneText: '满电复活！走，带你跑一圈。',
+      reward: { 罐头: 2, 电池: 1 }
     }
   }
 ];
