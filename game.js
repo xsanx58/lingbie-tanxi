@@ -75,6 +75,9 @@ const ITEMS = {
   '金属':     { cat: 'material', weight: 4, desc: '坚固的结构材料。' },
   '零件':     { cat: 'material', weight: 1.5, desc: '修理设备与机械。' },
   '电线':     { cat: 'material', weight: 1, desc: '电力设施需要它。' },
+  '火药':     { cat: 'material', weight: 0.3, desc: '子弹装药的原料，可从军营、警局搜到。' },
+  '弹壳':     { cat: 'material', weight: 0.2, desc: '用过的弹壳，可以复装成新子弹。' },
+  '铅块':     { cat: 'material', weight: 0.5, desc: '熔铸弹头的原料。' },
   '燃油':     { cat: 'fuel',     weight: 6, desc: '发电、车辆与生火都离不开的战略资源。' },
   '背包':     { cat: 'equip',    carry: 12, weight: 1, desc: '大幅提升负重上限。' },
   '随身无线电': { cat: 'tool',   weight: 0.4, desc: '联系阵营、接取任务、与结识的人保持联络。' },
@@ -153,10 +156,10 @@ const LOOT_POOLS = {
     ['绷带', 32], ['消毒剂', 18], ['止痛药', 18], ['抗生素', 14], ['维生素', 8], ['医疗包', 10]
   ],
   weapon: [
-    ['棒球棍', 22], ['菜刀', 18], ['撬棍', 16], ['警棍', 8], ['消防斧', 10], ['砍刀', 10], ['手枪', 9], ['步枪', 7]
+    ['棒球棍', 22], ['菜刀', 18], ['撬棍', 16], ['警棍', 8], ['消防斧', 10], ['砍刀', 10], ['手枪', 9], ['步枪', 7], ['手枪弹', 6], ['步枪弹', 5]
   ],
   material: [
-    ['木板', 28], ['金属', 20], ['零件', 20], ['电线', 16], ['工具组', 8], ['旧衣服', 8]
+    ['木板', 28], ['金属', 20], ['零件', 20], ['电线', 16], ['工具组', 8], ['旧衣服', 8], ['火药', 4], ['弹壳', 5], ['铅块', 4]
   ],
   fuel: [
     ['燃油', 62], ['零件', 22], ['工具组', 10], ['电池', 6]
@@ -172,7 +175,13 @@ const SPECIAL_POOLS = {
   pasture:[['羊毛', 18], ['土豆', 22], ['肥料', 14], ['饲料', 16], ['羊', 10], ['牛奶', 12], ['牛', 8]],
   wharf:   [['瓶装水', 22], ['罐头', 28], ['零件', 20], ['燃油', 15], ['金属', 15]],
   corp:    [['电池', 25], ['维生素', 20], ['抗生素', 15], ['零件', 25], ['电线', 15]],
-  church:  [['维生素', 25], ['净水', 25], ['罐头', 20], ['旧衣服', 15], ['种子', 15]]
+  church:  [['维生素', 25], ['净水', 25], ['罐头', 20], ['旧衣服', 15], ['种子', 15]],
+  police:  [['手枪弹', 22], ['警棍', 16], ['手枪', 10], ['弹壳', 22], ['火药', 18], ['铅块', 12]],
+  military:[['步枪弹', 20], ['手枪弹', 16], ['步枪', 8], ['军粮', 14], ['火药', 20], ['弹壳', 16], ['铅块', 6]],
+  fuel:    [['燃油', 50], ['电池', 18], ['零件', 20], ['工具组', 12]],
+  building:[['木板', 30], ['金属', 24], ['零件', 18], ['电线', 16], ['工具组', 12]],
+  pharmacy:[['绷带', 24], ['消毒剂', 18], ['止痛药', 20], ['抗生素', 16], ['维生素', 12], ['医疗包', 10]],
+  hospital:[['医疗包', 20], ['绷带', 20], ['抗生素', 18], ['消毒剂', 14], ['止痛药', 14], ['维生素', 14]]
 };
 
 /* ==================== 地点 ==================== */
@@ -181,18 +190,18 @@ const LOC_DEFS = {
   home:     { name: '破旧公寓',   type: '住宅', travel: 0, loot: { food: 2, misc: 2 },              baseDanger: 1.0 },
   store:    { name: '街角便利店', type: '商店', travel: 1, loot: { food: 4, misc: 1 },              baseDanger: 1.5 },
   market:   { name: '城东超市',   type: '商店', travel: 2, loot: { food: 6, misc: 2, weapon: 1 },   baseDanger: 2.5 },
-  pharmacy: { name: '惠民药店',   type: '医疗', travel: 1, loot: { med: 5, misc: 1 },               baseDanger: 1.8 },
-  hospital: { name: '市立医院',   type: '医疗', travel: 3, loot: { med: 7, weapon: 1, misc: 1 },    baseDanger: 3.2 },
+  pharmacy: { name: '惠民药店',   type: '医疗', travel: 1, loot: { med: 5, misc: 1 }, special: 'pharmacy', baseDanger: 1.8 },
+  hospital: { name: '市立医院',   type: '医疗', travel: 3, loot: { med: 7, weapon: 1, misc: 1 }, special: 'hospital', baseDanger: 3.2 },
   school:   { name: '实验中学',   type: '公共', travel: 2, loot: { food: 3, misc: 2, material: 1 }, baseDanger: 2.2 },
-  police:   { name: '城西警察局', type: '公共', travel: 3, loot: { weapon: 4, misc: 1 },            baseDanger: 3.4 },
-  gas:      { name: '城郊加油站', type: '燃料', travel: 2, loot: { fuel: 6, misc: 1 },              baseDanger: 2.0 },
+  police:   { name: '城西警察局', type: '公共', travel: 3, loot: { weapon: 4, misc: 1 }, special: 'police', baseDanger: 3.4 },
+  gas:      { name: '城郊加油站', type: '燃料', travel: 2, loot: { fuel: 6, misc: 1 }, special: 'fuel', baseDanger: 2.0 },
   factory:  { name: '北郊工厂',   type: '工业', travel: 3, loot: { material: 6, weapon: 1, fuel: 1 }, baseDanger: 2.6 },
-  warehouse:{ name: '物流仓库',   type: '工业', travel: 3, loot: { material: 7, misc: 2 },          baseDanger: 2.4 },
+  warehouse:{ name: '物流仓库',   type: '工业', travel: 3, loot: { material: 7, misc: 2 }, special: 'building', baseDanger: 2.4 },
   farm:     { name: '南郊农场',   type: '农业', travel: 3, loot: { food: 5, misc: 1 }, special: 'farm', baseDanger: 0.8 },
   mall:     { name: '万象商场',   type: '商店', travel: 3, loot: { food: 5, misc: 3, weapon: 1, med: 1 }, baseDanger: 4.0 },
   station:  { name: '老火车站',   type: '公共', travel: 2, loot: { food: 2, misc: 2, material: 1 }, baseDanger: 2.6 },
   village:  { name: '柳河村',     type: '农业', travel: 3, loot: { food: 4, misc: 1 }, special: 'village', baseDanger: 1.0 },
-  mil_hq:   { name: '城东军营',   type: '军事', travel: 3, city: 'A', loot: { weapon: 3, med: 1 },  baseDanger: 3.0 },
+  mil_hq:   { name: '城东军营',   type: '军事', travel: 3, city: 'A', loot: { weapon: 3, med: 1 }, special: 'military', baseDanger: 3.0 },
   caravan_hq: { name: '商队驿站', type: '商业', travel: 2, city: 'A', loot: { food: 2, misc: 2, material: 1 }, baseDanger: 1.5 },
   b_wharf:  { name: '滨江码头',   type: '工业', travel: 1, city: 'B', loot: { material: 4, food: 2, misc: 1 }, special: 'wharf', baseDanger: 2.2 },
   b_college:{ name: '临江大学城', type: '公共', travel: 2, city: 'B', loot: { food: 3, misc: 2, material: 1 }, baseDanger: 2.4 },
@@ -356,7 +365,9 @@ const RECIPES = [
   { id: 'repair',  name: '修理武器', desc: '恢复当前武器一半耐久。', need: { 零件: 1 }, special: 'repair', workshop: true },
   { id: 'trap',    name: '制作陷阱', desc: '基地防御 +4。', need: { 木板: 2, 零件: 1 }, special: 'trap', workshop: true },
   { id: 'fertilizer', name: '沤制肥料', desc: '用变质食物与旧衣服堆肥。', need: { 变质食品: 2, 旧衣服: 1 }, out: [['肥料', 1]], workshop: false },
-  { id: 'feed',    name: '配制饲料', desc: '用玉米和小麦磨制。', need: { 玉米: 2, 小麦: 1 }, out: [['饲料', 2]], workshop: true }
+  { id: 'feed',    name: '配制饲料', desc: '用玉米和小麦磨制。', need: { 玉米: 2, 小麦: 1 }, out: [['饲料', 2]], workshop: true },
+  { id: 'pistol_ammo', name: '复装手枪弹', desc: '把火药、弹壳和铅块压成手枪弹。', need: { 火药: 1, 弹壳: 2, 铅块: 1 }, out: [['手枪弹', 8]], workshop: true },
+  { id: 'rifle_ammo',  name: '复装步枪弹', desc: '把火药、弹壳和铅块压成步枪弹。', need: { 火药: 2, 弹壳: 3, 铅块: 1 }, out: [['步枪弹', 8]], workshop: true }
 ];
 
 const CROPS = { 玉米: { days: 4, min: 2, max: 3 }, 小麦: { days: 5, min: 2, max: 3 }, 土豆: { days: 4, min: 2, max: 4 } };
@@ -371,6 +382,34 @@ const FARM_SHOP = [
   ['玉米', 300], ['小麦', 350], ['土豆', 280], ['猪肉', 600], ['牛奶', 450], ['羊毛', 500],
   ['鸡', 500], ['猪', 1200], ['牛', 2500], ['羊', 1800]
 ];
+
+const FACTION_SHOPS = {
+  military: {
+    name: '军需处', icon: '🪖',
+    desc: '军方残部清点出的剩余军械。子弹、武器和军粮，都按规矩来。',
+    items: [['手枪弹', 60], ['步枪弹', 90], ['军粮', 260], ['手枪', 5200], ['步枪', 15000], ['冲锋枪', 18000], ['火药', 140], ['弹壳', 50], ['铅块', 90]]
+  },
+  caravan: {
+    name: '农贸商店', icon: '🐫',
+    desc: '商队走南闯北，货物最全。种子、肥料、饲料、农作物与活体牲畜都在这里。',
+    items: FARM_SHOP.map(x => [x[0], x[1]])
+  },
+  raiders: {
+    name: '黑市', icon: '🏴',
+    desc: '掠夺者的黑市。东西来路不明，但刀和油从来不缺。',
+    items: [['砍刀', 1600], ['棒球棍', 800], ['燃油', 420], ['止痛药', 300], ['方便面', 160], ['手枪弹', 70]]
+  },
+  church: {
+    name: '救济站', icon: '⛪',
+    desc: '守望者教会的救济站。信徒捐献的食物与药品，换取生存下去的信任。',
+    items: [['罐头', 180], ['面包', 120], ['净水', 90], ['维生素', 260], ['绷带', 140], ['抗生素', 900], ['旧衣服', 100], ['种子', 180]]
+  },
+  corp: {
+    name: '科技商店', icon: '🏢',
+    desc: '企业避难所的物资窗口。电池、零件和高科技医疗品，明码标价。',
+    items: [['电池', 220], ['零件', 260], ['电线', 180], ['工具组', 800], ['医疗包', 1100], ['抗生素', 750], ['维生素', 300], ['收音机', 600]]
+  }
+};
 
 /* ==================== 姓名库 ==================== */
 
@@ -436,7 +475,7 @@ const SAVE_KEY = 'moshi_canxiang_save_v1';
 const SETTINGS_KEY = 'moshi_canxiang_settings_v1';
 const ACHIEVE_KEY = 'moshi_canxiang_achieve_v1';
 const SLOT_KEYS = { auto: SAVE_KEY, s1: SAVE_KEY + '_s1', s2: SAVE_KEY + '_s2', s3: SAVE_KEY + '_s3' };
-const GAME_VERSION = '1.6.0';
+const GAME_VERSION = '1.7.0';
 
 /* ==================== 季节 / 进化 / 成就 ==================== */
 
@@ -862,7 +901,9 @@ function bodyStatus() {
 }
 
 function currentWeapon(p) {
-  if (p.weapon && countInv(p.inventory, p.weapon) > 0) return ITEMS[p.weapon];
+  if (p.weapon && countInv(p.inventory, p.weapon) > 0) {
+    return { ...ITEMS[p.weapon], name: itemName(p.weapon) };
+  }
   if (p.weapon && countInv(p.inventory, p.weapon) <= 0) {
     p.weapon = null;
   }
@@ -1430,7 +1471,7 @@ function scavenge() {
     else { addItem(p.inventory, itemId, qty); found.push(`${itemName(itemId)}×${qty}`); }
   }
   // 地区特产
-  if (def.special && SPECIAL_POOLS[def.special] && chance(0.35)) {
+  if (def.special && SPECIAL_POOLS[def.special] && chance(0.70)) {
     const spId = weightPick(SPECIAL_POOLS[def.special]);
     const sq = (spId === '鸡' || spId === '牛' || spId === '羊') ? 1 : (spId === '种子' ? randInt(1, 2) : randInt(1, 2));
     addItem(p.inventory, spId, sq);
@@ -1449,6 +1490,30 @@ function scavenge() {
   if (loc.danger > 0.8 && chance(clamp(loc.danger / 16, 0.05, 0.45))) {
     addLog('翻找东西的声音惊动了附近的丧尸……', 'bad');
     startEncounter(S.world.location, { origin: S.world.location, surprise: chance(0.35) });
+    return;
+  }
+  renderAll();
+}
+
+function extractFuel() {
+  const p = S.player;
+  const loc = S.world.locations[S.world.location];
+  const def = LOC_DEFS[S.world.location];
+  if (def.name !== '城郊加油站') { toast('只有加油站才能抽取燃油。'); return; }
+  if (p.stamina < 8) { toast('你太累了，抽不动了。'); return; }
+  p.stamina = clamp(p.stamina - 8, 0, 100);
+  p.fatigue = clamp(p.fatigue + 4, 0, 100);
+  advancePhase(2);
+  if (S.world.flags.dead) return;
+  const qty = randInt(5, 10);
+  addItem(p.inventory, '燃油', qty);
+  addLog(`你启动油泵，抽到了燃油 ×${qty}。`, 'good');
+  if (S.player.skills.搜索) S.player.skills.搜索 = clamp(S.player.skills.搜索 + 1, 0, 100);
+  // 60% 概率引来大群丧尸
+  if (chance(0.6)) {
+    loc.zombieCount = clamp(loc.zombieCount + randInt(5, 9), 0, 40);
+    addLog('油泵的轰鸣声在废墟间回荡——丧尸群被惊动了！', 'bad');
+    startEncounter(S.world.location, { origin: S.world.location, surprise: false, horde: true });
     return;
   }
   renderAll();
@@ -1530,12 +1595,13 @@ function encounterStatusHtml() {
     .filter(l => l.cls !== 'sys' && !String(l.text).startsWith('【人生】'))
     .slice(-5)
     .map(l => `<div class="battle-line ${l.cls}">${escapeHtml(l.text)}</div>`).join('');
-  const noiseBar = '▰'.repeat(Math.min(10, Math.round(ENC.noise))) + '▱'.repeat(Math.max(0, 10 - Math.round(ENC.noise)));
+  const noisePct = clamp(Math.round((ENC.noise / 12) * 100), 0, 100);
   return `<div class="battle">
     <div class="battle-side">
       <div class="battle-title">🧟 敌人 ${ENC.surprise ? '· 突袭！' : ''}</div>
       ${mobs}
-      <div class="row" style="margin-top:6px;"><span class="k">噪音</span><span class="v" style="color:${ENC.noise >= 8 ? 'var(--bad)' : 'var(--warn)'};">${noiseBar}</span></div>
+      <div class="mob-top" style="margin-top:6px;"><span>噪音</span><span>${Math.round(ENC.noise)} / 12</span></div>
+      <div class="bar"><div class="fill need" style="width:${noisePct}%"></div></div>
     </div>
     <div class="battle-side">
       <div class="battle-title">🛡 ${escapeHtml(p.name)}</div>
@@ -3188,6 +3254,9 @@ function renderActions() {
   const def = LOC_DEFS[locId];
   const cards = [];
   cards.push(actionCard('🔍', '搜刮此地', `在【${def.name}】寻找物资。每次必有收获，可反复搜索。${specialText(def)}`, 'scavenge()', '消耗 1 个时段'));
+  if (locId === 'gas') {
+    cards.push(actionCard('⛽', '抽取燃油', '启动油泵抽取地下油库的燃油，每次约 5–10 桶。油泵的轰鸣声很可能引来大群丧尸。', 'extractFuel()', '消耗 2 个时段'));
+  }
   if (loc.zombieCount > 0 && loc.zombieCount <= 6) {
     cards.push(actionCard('⚔️', '清理周围的丧尸', `这里大约有 ${loc.zombieCount} 只丧尸，主动清剿可以减少威胁。`, `startEncounter('${locId}', { origin: '${locId}' })`, '战斗有风险'));
   }
@@ -3241,7 +3310,7 @@ function renderMap() {
     const dotHtml = Array.from({ length: 5 }, (_, i) => `<span class="dot ${i < Math.ceil(dots / 2) ? 'on' : ''}"></span>`).join('');
     const z = loc.zombieCount;
     const zText = S.player.ability === 'danger'
-      ? (z > 0 ? `丧尸约 ${z}` : '无丧尸')
+      ? (z > 0 ? `丧尸约 ${Math.round(z)}` : '无丧尸')
       : (z === 0 ? '安静' : z < 5 ? '零星丧尸' : z < 12 ? '丧尸较多' : '大量丧尸');
     const isCur = id === cur;
     const isBase = S.base && S.base.locId === id;
@@ -3251,7 +3320,7 @@ function renderMap() {
     const cost = travelCost(id);
     return `<div class="loc-card">
       <div class="n"><span>${LOC_EMOJI[id]} ${def.name}${isBase ? ' 🏠' : ''}</span><span class="danger-dots">${dotHtml}</span></div>
-      <div class="info">${def.type} · ${zText}${sv} · 可反复搜索</div>
+      <div class="info">${def.type} · ${zText}${sv}</div>
       ${specialText(def) ? `<div class="info" style="color:var(--accent2)">${specialText(def)}</div>` : ''}
       ${npcLine}
       ${loc.note ? `<div class="info" style="color:var(--warn)">${escapeHtml(loc.note)}</div>` : ''}
@@ -3311,7 +3380,7 @@ function renderInventory() {
         <button class="btn small" onclick="discardSetMax()">全部</button>
         <button class="btn small danger" onclick="confirmDiscard()">丢弃</button>
       </div>
-      <div class="hint" style="color:var(--dim);font-size:12px;margin-top:7px;">先选择物品、再填数量。点击「丢弃」后会再次向你确认，确认后物品无法找回。</div>
+      <div class="hint" style="color:#c9d3cc;font-size:12px;margin-top:8px;text-shadow:0 1px 3px rgba(0,0,0,.7);">先选择物品、再填数量。点击「丢弃」后会再次向你确认，确认后物品无法找回。</div>
     </div>` : '';
   const trunkHtml = S.world.vehicle ? `
     <div class="card" style="margin-top:12px;">
@@ -6467,7 +6536,7 @@ function radioFactions() {
       <div style="display:flex;gap:4px;flex-wrap:wrap;">
         <button class="btn small" onclick="radioFactionChain('${f}')">传奇任务线</button>
         <button class="btn small" onclick="radioContactFaction('${f}')">日常委托</button>
-        <button class="btn small" onclick="radioFarmShop()">农贸商店</button>
+        <button class="btn small" onclick="radioFactionShop('${f}')">${FACTION_SHOPS[f].icon} ${FACTION_SHOPS[f].name}</button>
       </div>
     </div>`;
   }).join('');
@@ -6819,6 +6888,38 @@ function radioFarmShop() {
     `<p class="narrative">你的现金：¥${Math.round(S.player.money)}。种子、肥料、饲料、农作物与活体牲畜都在这里。</p>
      <div style="margin-top:8px;">${list}</div>`,
     '<button class="btn" onclick="openRadio()">返回</button>');
+}
+
+function radioFactionShop(faction) {
+  const shop = FACTION_SHOPS[faction];
+  if (!shop) return;
+  const rep = S.world.factions[faction];
+  const repLabel = repText(rep);
+  const list = shop.items.map(([id, price]) => {
+    const can = S.player.money >= price;
+    return `<div class="facility">
+      <div><div class="n">${itemName(id)}${price > 0 ? `<span class="tag" style="margin-left:6px;">¥${price}</span>` : ''}</div>
+      <div class="d">${(ITEMS[id] && ITEMS[id].desc) || ''}</div></div>
+      <button class="btn small" ${can ? '' : 'disabled'} onclick="buyFactionItem('${faction}', '${id}', ${price})">${price > 0 ? `¥${price}` : '赠送'}</button>
+    </div>`;
+  }).join('');
+  openModal(`${shop.icon} ${shop.name}`,
+    `<p class="narrative">你的现金：¥${Math.round(S.player.money)} · 当前关系：${repLabel}。</p>
+     <p class="narrative">${escapeHtml(shop.desc)}</p>
+     <div style="margin-top:8px;">${list}</div>`,
+    '<button class="btn" onclick="radioFactions()">返回</button>');
+}
+
+function buyFactionItem(faction, id, price) {
+  const shop = FACTION_SHOPS[faction];
+  if (!shop) return;
+  if (S.player.money < price) { toast('现金不足。'); return; }
+  S.player.money -= price;
+  addItem(S.player.inventory, id, 1);
+  const def = ITEMS[id];
+  if (def.cat === 'gun') addItem(S.player.inventory, def.ammo, def.burst ? 24 : 12);
+  addLog(`你在${shop.name}花 ¥${price} 买下了【${itemName(id)}】。`, 'good');
+  radioFactionShop(faction);
 }
 
 function buyFarmItem(id, price) {
