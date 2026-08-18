@@ -481,7 +481,7 @@ const SAVE_KEY = 'moshi_canxiang_save_v1';
 const SETTINGS_KEY = 'moshi_canxiang_settings_v1';
 const ACHIEVE_KEY = 'moshi_canxiang_achieve_v1';
 const SLOT_KEYS = { auto: SAVE_KEY, s1: SAVE_KEY + '_s1', s2: SAVE_KEY + '_s2', s3: SAVE_KEY + '_s3' };
-const GAME_VERSION = '1.9.0';
+const GAME_VERSION = '2.0.0';
 
 /* ==================== 季节 / 进化 / 成就 ==================== */
 
@@ -661,6 +661,7 @@ function ensureSaveCompat(state) {
     }
   }
   if (!state.world.flags.adventure) state.world.flags.adventure = {};
+  if (!state.world.adventureQuests) state.world.adventureQuests = [];
   if (!state.world.flags.endingsAchieved) state.world.flags.endingsAchieved = [];
   if (!state.world.flags.acceptedEnding) state.world.flags.acceptedEnding = null;
   for (const loc of Object.values(state.world.locations)) {
@@ -753,6 +754,7 @@ function freshState(creation) {
   world.flags.endingsAchieved = [];
   world.flags.acceptedEnding = null;
   world.flags.adventure = {};
+  world.adventureQuests = [];
   world.flags.evo = { level: 0, density: 0 };
   world.flags.arcs = {};
   world.flags.arcVisited = {};
@@ -3498,9 +3500,32 @@ function actionCard(icon, title, desc, fn, cost) {
 }
 
 function renderTab() {
-  const map = { actions: renderActions, map: renderMap, inventory: renderInventory, base: renderBase, team: renderTeam, log: renderLogFull };
+  const map = { actions: renderActions, map: renderMap, inventory: renderInventory, base: renderBase, team: renderTeam, quests: renderQuests, log: renderLogFull };
   (map[ui.tab] || renderActions)();
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === ui.tab));
+}
+
+function renderQuests() {
+  const active = S.world.adventureQuests || [];
+  const done = ADVENTURE_QUESTS.filter(q => S.world.flags.adventure['quest_' + q.id]);
+  const activeHtml = active.length ? active.map(aq => {
+    const q = ADVENTURE_QUESTS.find(x => x.id === aq.id);
+    if (!q) return '';
+    const loc = LOC_DEFS[q.target];
+    const isHere = S.world.location === q.target;
+    return `<div class="loc-card">
+      <div class="n"><span>${q.icon} ${escapeHtml(q.title)}</span><span class="badge warnb">进行中</span></div>
+      <div class="info">🎯 ${escapeHtml(q.goal)}</div>
+      <div class="info">📍 目的地：${CITIES[loc.city]} · ${escapeHtml(loc.name)}${isHere ? '（你已到达！回到行动页点击奇遇按钮）' : ''}</div>
+      <div class="foot">${isHere ? `<button class="btn small primary" onclick="switchTab('actions')">去行动页触发奇遇</button>` : `<button class="btn small" onclick="switchTab('map')">打开地图</button>`}</div>
+    </div>`;
+  }).join('') : '<p class="narrative" style="color:var(--dim);">当前没有进行中的奇遇。多在世界上走走，奇遇会找上你。</p>';
+  const doneHtml = done.length ? `<div class="card-title" style="margin:16px 0 8px;">✅ 已完成的奇遇</div><div class="loc-grid">${done.map(q => `
+    <div class="loc-card">
+      <div class="n"><span>${q.icon} ${escapeHtml(q.title)}</span><span class="badge ok">已完成</span></div>
+      <div class="info">${escapeHtml(q.complete.text)}</div>
+    </div>`).join('')}</div>` : '';
+  $('tabContent').innerHTML = `<div class="view-head"><h3>✨ 奇遇</h3><span class="sub">正在进行 ${active.length} 个 · 已完成 ${done.length} 个</span></div>${activeHtml}${doneHtml}`;
 }
 
 function renderActions() {
@@ -3532,6 +3557,12 @@ function renderActions() {
   const npcsHere = (loc.npcs || []).map(x => S.world.specialNpcs.find(n => n.id === x)).filter(Boolean);
   for (const n of npcsHere) {
     cards.push(actionCard('🧭', `与 ${n.name} 交谈`, `${n.profession} · 好感度 ${Math.round(n.favor)} / 100`, `meetNpc('${n.id}')`));
+  }
+  // 奇遇任务：到达目标地点后显示触发按钮
+  const questsHere = (S.world.adventureQuests || []).filter(aq => aq.stage === 'accepted' && ADVENTURE_QUESTS.some(q => q.id === aq.id && q.target === locId));
+  for (const aq of questsHere) {
+    const q = ADVENTURE_QUESTS.find(x => x.id === aq.id);
+    cards.push(actionCard(q.icon, `奇遇：${q.title}`, `你已经到达${def.name}。${q.goal}`, `startAdventureGoal('${q.id}')`, '继续奇遇'));
   }
   if (hasPersonalRadio()) cards.push(actionCard('📻', '通讯系统', '联系阵营接任务、指派营地成员代送、问候认识的人。', 'openRadio()'));
   if (hasRadio()) cards.push(actionCard('📡', '收听广播', '了解世界动向与各方势力。', 'listenRadio()'));
@@ -5596,6 +5627,156 @@ const SPECIAL_NPC_TEMPLATES = [
 
 /* ==================== 奇遇：剧情事件 ==================== */
 
+const ADVENTURE_QUESTS = [
+  {
+    id: 'police_radio', icon: '👮', title: '警察局的最后呼叫',
+    target: 'police',
+    giver: { name: '老周', profession: '退役刑警', desc: '蹲在街角擦枪的老人，眼神像鹰一样。' },
+    intro: [
+      { speaker: 'giver', text: '年轻人，等等。你是从东边过来的？那儿的警察局，去过没有？' },
+      { speaker: 'you', text: '还没去过。怎么了？' },
+      { speaker: 'giver', text: '我搭档大刘，最后一条通讯就是从警察局发出来的：“周哥，我找到他们藏起来的军火库了，坐标就在档案室……”话没说完，信号就断了。' },
+      { speaker: 'giver', text: '我这把老骨头过不去了。你要是能去警察局档案室看看，不管找到什么，军火库里你拿得动的，都归你。' }
+    ],
+    goal: '前往【城西警察局】，在档案室寻找大刘留下的军火库坐标。',
+    goalScenes: [
+      { speaker: 'narrator', text: '警察局大厅里横七竖八倒着桌椅，墙上的值班表还停留在灾难那天。你摸向档案室。' },
+      { speaker: 'narrator', text: '档案室的门虚掩着。地上散落着文件，桌上有一部对讲机，指示灯还微弱地闪着——有人给它换了电池，就在不久前。' },
+      { speaker: 'you', text: '大刘？大刘还在这里吗？' }
+    ],
+    complete: {
+      text: '你在档案室深处找到了大刘。他靠着墙，一条腿已经废了，却还紧紧抱着那份军火库地图。他把地图塞进你手里：“告诉老周，我刘大壮，没当逃兵。”',
+      reward: {
+        items: [['手枪弹', 12], ['步枪', 1], ['金属', 3]], rep: { military: 1 },
+        npc: {
+          specialId: null, name: '大刘', sex: '男', age: 46, profession: '刑警',
+          skills: { 远程: 55, 近战: 45, 搜索: 40, 潜行: 35, 医疗: 15 },
+          ability: null, weapon: '手枪',
+          story: '在警察局档案室被围困了整整一周，直到你出现。他把军火库地图和自己都交给了你。'
+        }
+      }
+    }
+  },
+  {
+    id: 'pharmacy_granny', icon: '💊', title: '药店的咳嗽声',
+    target: 'pharmacy',
+    giver: { name: '阿芳', profession: '药店老板娘', desc: '护着几个孩子躲在地下室的女人。' },
+    intro: [
+      { speaker: 'giver', text: '求你了，帮帮我。我家老太太病得很重，一直咳，还发烧。惠民药店有她的特效药，可那里……我不敢去。' },
+      { speaker: 'you', text: '把药名告诉我，我去找。' },
+      { speaker: 'giver', text: '叫“愈咳宁”，蓝色盒子。找到的话，地下室里的孩子们也都能喘口气了。' }
+    ],
+    goal: '前往【惠民药店】，寻找蓝色盒子的愈咳宁。',
+    goalScenes: [
+      { speaker: 'narrator', text: '药店的玻璃门碎了一地。货架被翻得七零八落，地上有干涸的血迹。' },
+      { speaker: 'narrator', text: '你绕到后面的仓库，在角落里找到一只上锁的医药柜。柜门缝隙里，露出一角蓝色包装。' }
+    ],
+    complete: {
+      text: '你把愈咳宁带回地下室。老人喝下药，咳嗽终于平息了。阿芳把攒下的药品塞给你，孩子们怯生生地说：“谢谢哥哥/姐姐。”',
+      reward: { items: [['绷带', 2], ['抗生素', 1], ['维生素', 1]], tag: '仁慈' }
+    }
+  },
+  {
+    id: 'wharf_fisherman', icon: '⚓', title: '码头边的白船',
+    target: 'b_wharf',
+    giver: { name: '船老大', profession: '渔船船长', desc: '守着最后一条渔船不肯走的汉子。' },
+    intro: [
+      { speaker: 'giver', text: '看到那条白船了吗？那是我兄弟的船。他说好去对岸接人，三天了，没有回来。' },
+      { speaker: 'giver', text: '我走不开——这码头就剩我一个人守着补给。你去滨江码头看看，要是他……要是有什么消息，回来告诉我。' }
+    ],
+    goal: '前往【滨江码头】，寻找白船船长的下落。',
+    goalScenes: [
+      { speaker: 'narrator', text: '江风很大。那条白船就泊在码头边，船身轻轻摇晃，甲板上空无一人。' },
+      { speaker: 'narrator', text: '你在船舱里找到一本航行日志，最后一页写着：“对岸的人等不了了，我先过去。若是三天没回，就把船交给我兄弟。”' }
+    ],
+    complete: {
+      text: '你没有找到人，只带回了那本日志。船老大沉默了很久，把一把钥匙拍进你手里：“船还在，我就还等他。这仓里的油和鱼，你拿走吧。”',
+      reward: { items: [['燃油', 2], ['罐头', 3], ['瓶装水', 2]], money: 800 }
+    }
+  },
+  {
+    id: 'military_fugitive', icon: '🪖', title: '逃兵的钢盔',
+    target: 'mil_hq',
+    giver: { name: '小邓', profession: '年轻逃兵', desc: '躲在废墟里的年轻人，眼神躲闪。' },
+    intro: [
+      { speaker: 'giver', text: '我……我是从城东军营逃出来的。别报告我！我受不了了，真的受不了了。' },
+      { speaker: 'you', text: '冷静点，我不认识什么军方。' },
+      { speaker: 'giver', text: '我的战友阿海，还被困在军营。他替我顶了班，让我跑。求你去军营找找他，就说小邓对不起他。' }
+    ],
+    goal: '前往【城东军营】，寻找被困的阿海。',
+    goalScenes: [
+      { speaker: 'narrator', text: '军营外拉着铁丝网，哨塔上空无一人。你贴着墙根摸进去，听见仓库方向传来压低的呼救声。' },
+      { speaker: 'narrator', text: '阿海被压在塌了一半的货架下，已经两天没吃没喝。见你带着小邓的话来，他咧开干裂的嘴笑了。' }
+    ],
+    complete: {
+      text: '你救出了阿海。他跛着一条腿，却把一只军用手电和半箱弹药塞给你：“这是小邓该还你的。告诉他，我不怪他——活着，比什么都强。”',
+      reward: {
+        items: [['步枪弹', 8], ['军粮', 2], ['医疗包', 1]], tag: '救人者',
+        npc: {
+          specialId: null, name: '阿海', sex: '男', age: 25, profession: '军人',
+          skills: { 远程: 50, 近战: 40, 驾驶: 30, 医疗: 20, 搜索: 25 },
+          ability: null, weapon: '步枪',
+          story: '被压在军营货架下两天，获救后决定追随你。他说，这条命是你捡回来的。'
+        }
+      }
+    }
+  },
+  {
+    id: 'church_bellkeeper', icon: '⛪', title: '教堂的守钟人',
+    target: 'church_hq',
+    giver: { name: '老米', profession: '守钟人', desc: '背着一大串钥匙的老人。' },
+    intro: [
+      { speaker: 'giver', text: '孩子，帮我个忙。大教堂的钟，三天没响了。以前守钟的是我徒弟阿诚，他答应我，只要还活着，每天黄昏都会敲钟。' },
+      { speaker: 'giver', text: '我已经爬不上那高塔了。你去大教堂看看，若是他……若是他还在，告诉他，师父想听他再敲一次钟。' }
+    ],
+    goal: '前往【大教堂】，查看钟塔上守钟人阿诚的下落。',
+    goalScenes: [
+      { speaker: 'narrator', text: '教堂里空荡荡的，彩色玻璃碎了大半，夕阳从破洞照进来，把长椅染成一片金红。' },
+      { speaker: 'narrator', text: '你沿着螺旋楼梯爬上钟塔，看见一个年轻人枕着钟绳睡着了。他的额头滚烫，已经病了很久。' }
+    ],
+    complete: {
+      text: '你照顾了阿诚一整夜。第二天黄昏，钟声重新响起，在废墟上空回荡。老米说，这钟声，是这座城市还活着的证明。',
+      reward: { items: [['维生素', 2], ['净水', 3], ['罐头', 2]], stats: { morale: 8 } }
+    }
+  },
+  {
+    id: 'corp_scientist', icon: '🧬', title: '避难所的样本箱',
+    target: 'corp_hq',
+    giver: { name: '匿名信', profession: '无署名', desc: '一封塞进你门缝的信。' },
+    intro: [
+      { speaker: 'narrator', text: '你在门口发现一封没有署名的信，字迹工整而急促：' },
+      { speaker: 'giver', text: '“企业避难所地下三层，有一只低温样本箱，编号 X-77。那里面的东西，能证明他们一直在用人做实验。把它带出来，交给能曝光真相的人。”' }
+    ],
+    goal: '前往【企业避难所】，寻找地下三层的低温样本箱 X-77。',
+    goalScenes: [
+      { speaker: 'narrator', text: '避难所的大门已经失控，警报灯无声地闪烁着。你沿着应急通道下到地下三层。' },
+      { speaker: 'narrator', text: '冷冻库里整齐排着一排排样本箱。你找到 X-77，箱面上贴着一张手写的标签：“第 47 号受试者，男，34 岁。”' }
+    ],
+    complete: {
+      text: '你带着样本箱离开。三天后，一位记者联系上你，说这些证据足以让避难所身败名裂。作为回报，他给了你一批他们顺出来的物资。',
+      reward: { items: [['电池', 3], ['零件', 3], ['抗生素', 1]], tag: '揭发者' }
+    }
+  },
+  {
+    id: 'raider_brother', icon: '🏴', title: '掠夺者的弟弟',
+    target: 'raider_hq',
+    giver: { name: '疤脸', profession: '前掠夺者', desc: '金盆洗手的前掠夺者，胳膊上有刀伤。' },
+    intro: [
+      { speaker: 'giver', text: '我弟弟还留在营地。他以为跟着他们才有活路，可那帮人现在连自己人都抢。' },
+      { speaker: 'giver', text: '我回不去了。你替我去掠夺者营地，找到我弟弟阿蛋，告诉他：哥在外头等他，别在营地里等死。' }
+    ],
+    goal: '前往【掠夺者营地】，找到阿蛋并带话。',
+    goalScenes: [
+      { speaker: 'narrator', text: '掠夺者营地里弥漫着劣质酒精和铁锈味。你在人群里找到一个瘦小的年轻人，正被两个大汉推搡。' },
+      { speaker: 'you', text: '阿蛋，你哥让我带话：他在外头等你。' }
+    ],
+    complete: {
+      text: '阿蛋跟着你离开了营地。他临走前把偷藏的一小箱物资给了你：“这是我从营地顺出来的，就当是谢礼。”',
+      reward: { items: [['燃油', 2], ['砍刀', 1], ['止痛药', 2]], tag: '有情有义' }
+    }
+  }
+];
+
 const ADVENTURE_EVENTS = [
   {
     id: 'starving_child', icon: '🍞', title: '巷口的孩子',
@@ -5894,6 +6075,7 @@ const ENDINGS = [
 /* ==================== 奇遇引擎 ==================== */
 
 let ADVENTURE = null;
+let ACTIVE_QUEST = null;
 let ACTIVE_NPC = null;
 let TRADE = null;
 
@@ -5904,6 +6086,12 @@ function maybeAdventure() {
 
 function rollAdventure() {
   if (!S || S.world.flags.dead || ENC || ADVENTURE) return;
+  // 地点型奇遇任务：给一个要去某地完成的任务
+  const quests = ADVENTURE_QUESTS.filter(q => !S.world.flags.adventure['quest_' + q.id]);
+  if (quests.length && chance(0.30)) {
+    spawnAdventureQuest(pick(quests));
+    return;
+  }
   const unMet = S.world.specialNpcs.filter(n => n.alive && !n.recruited && !n.met);
   if (unMet.length && chance(0.35)) {
     spawnAdventureNpc(pick(unMet));
@@ -5915,6 +6103,124 @@ function rollAdventure() {
     return;
   }
   smallDiscovery();
+}
+
+function spawnAdventureQuest(q) {
+  ACTIVE_QUEST = { id: q.id, stage: 'intro' };
+  addLog(`【奇遇】${q.title}——${q.goal}`, 'sys');
+  showQuestIntro();
+}
+
+function showQuestIntro() {
+  if (!ACTIVE_QUEST) return;
+  const q = ADVENTURE_QUESTS.find(x => x.id === ACTIVE_QUEST.id);
+  if (!q) return;
+  const lines = q.intro.map(l => `<p class="narrative"><b>${l.speaker === 'giver' ? escapeHtml(q.giver.name) : l.speaker === 'you' ? escapeHtml(S.player.name) : ''}${l.speaker === 'you' ? '（你）' : ''}：</b>${escapeHtml(l.text)}</p>`).join('');
+  openModal(`${q.icon} ${q.title}`,
+    `<p class="narrative" style="color:var(--accent2);">${escapeHtml(q.giver.profession)} · ${escapeHtml(q.giver.desc)}</p>
+     ${lines}
+     <p class="narrative" style="margin-top:12px;color:var(--warn);">🎯 目标：${escapeHtml(q.goal)}</p>`,
+    `<button class="btn primary" onclick="acceptAdventureQuest('${q.id}')">接下这个委托</button>
+     <button class="btn" onclick="closeModal()">先不接</button>`, false);
+}
+
+function acceptAdventureQuest(id) {
+  if (!S.world.adventureQuests) S.world.adventureQuests = [];
+  if (!S.world.adventureQuests.some(q => q.id === id)) S.world.adventureQuests.push({ id, stage: 'accepted' });
+  const q = ADVENTURE_QUESTS.find(x => x.id === id);
+  addLog(`【奇遇】你接下了「${q.title}」。目标地点已记入奇遇栏目。`, 'info');
+  ACTIVE_QUEST = null;
+  closeModal();
+  renderAll();
+}
+
+let QUEST_SCENE = null;
+
+function startAdventureGoal(id) {
+  const q = ADVENTURE_QUESTS.find(x => x.id === id);
+  if (!q) return;
+  if (S.world.location !== q.target) { toast('你还没到目标地点。打开奇遇栏目查看目的地。'); return; }
+  QUEST_SCENE = { id, idx: 0, stage: 'goal' };
+  showQuestScene();
+}
+
+function showQuestScene() {
+  if (!QUEST_SCENE) return;
+  const q = ADVENTURE_QUESTS.find(x => x.id === QUEST_SCENE.id);
+  if (!q) return;
+  const scenes = q.goalScenes;
+  if (QUEST_SCENE.idx >= scenes.length) {
+    showQuestComplete();
+    return;
+  }
+  const l = scenes[QUEST_SCENE.idx];
+  const name = l.speaker === 'you' ? `${escapeHtml(S.player.name)}（你）` : l.speaker === 'giver' ? escapeHtml(q.giver.name) : '';
+  openModal(`${q.icon} ${q.title}`,
+    `<p class="narrative">${name ? `<b>${name}：</b>` : ''}${escapeHtml(l.text)}</p>
+     <p class="narrative" style="color:var(--dim);margin-top:10px;">${QUEST_SCENE.idx + 1} / ${scenes.length}</p>`,
+    `<button class="btn primary" onclick="questSceneNext()">继续</button>`, false);
+}
+
+function questSceneNext() {
+  if (!QUEST_SCENE) return;
+  QUEST_SCENE.idx++;
+  showQuestScene();
+}
+
+function showQuestComplete() {
+  if (!QUEST_SCENE) return;
+  const q = ADVENTURE_QUESTS.find(x => x.id === QUEST_SCENE.id);
+  if (!q) return;
+  const npcReward = q.complete.reward && q.complete.reward.npc;
+  openModal(`${q.icon} ${q.title} — 完成`,
+    `<p class="narrative">${escapeHtml(q.complete.text)}</p>
+     ${npcReward ? `<p class="narrative" style="color:var(--accent2);margin-top:10px;">🤝 ${escapeHtml(npcReward.name)}（${escapeHtml(npcReward.profession)}）愿意加入你的团队。</p>` : ''}`,
+    `<button class="btn primary" onclick="completeAdventureQuest('${q.id}')">领取奖励</button>`, false);
+}
+
+function completeAdventureQuest(id) {
+  const q = ADVENTURE_QUESTS.find(x => x.id === id);
+  if (!q) return;
+  const c = q.complete;
+  const r = c.reward || {};
+  const p = S.player;
+  if (r.items) {
+    for (const [itemId, n] of r.items) addItem(p.inventory, itemId, n);
+  }
+  if (r.money) p.money += r.money;
+  if (r.rep) for (const [k, v] of Object.entries(r.rep)) S.world.factions[k] = clamp(S.world.factions[k] + v, -5, 10);
+  if (r.tag) addTag(r.tag);
+  if (r.stats) for (const [k, v] of Object.entries(r.stats)) p[k] = clamp((p[k] || 0) + v, 0, 100);
+  if (r.npc) {
+    const b = ensureBase();
+    const sv = {
+      id: 'npc_' + Math.random().toString(36).slice(2, 9),
+      specialId: r.npc.specialId || null,
+      name: r.npc.name, sex: r.npc.sex, age: r.npc.age,
+      profession: r.npc.profession, profId: 'custom',
+      skills: Object.assign({}, r.npc.skills),
+      health: 100, morale: 70, loyalty: 60,
+      role: 'guard', traits: ['奇遇同伴', '可靠'],
+      ability: r.npc.ability || null,
+      weapon: r.npc.weapon || null,
+      inv: {},
+      alive: true, spouse: null, child: null,
+      joinedDay: S.world.day,
+      story: r.npc.story || '因一场奇遇与你相识，决定与你同行。'
+    };
+    b.population.push(sv);
+    addLog(`【奇遇】${r.npc.name} 加入了你的团队！`, 'good');
+    S.world.history.push(`${fmtTime(S.world.day)}：${r.npc.name} 因奇遇加入${p.name}的团队。`);
+    S.world.stat.rescued++;
+    checkAch();
+  }
+  S.world.flags.adventure['quest_' + q.id] = true;
+  S.world.adventureQuests = (S.world.adventureQuests || []).filter(aq => aq.id !== id);
+  addLog(`【奇遇】「${q.title}」完成！`, 'good');
+  S.world.history.push(`${fmtTime(S.world.day)}：完成奇遇「${q.title}」。`);
+  QUEST_SCENE = null;
+  closeModal();
+  renderAll();
 }
 
 function applyAdvEffects(eff) {

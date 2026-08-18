@@ -55,6 +55,8 @@
   }
   button{font-family:inherit;cursor:pointer;color:inherit;}
   input,select,textarea{font-family:inherit;font-size:14px;color:var(--text);}
+  select{color-scheme:dark;}
+  select option{background:#141b17;color:#e8ece9;}
   ::selection{background:rgba(255,92,77,.35);}
   .hidden{display:none !important;}
 
@@ -826,6 +828,7 @@
         <button class="tab" data-view="inventory">背包</button>
         <button class="tab" data-view="base">基地</button>
         <button class="tab" data-view="team">团队</button>
+        <button class="tab" data-view="quests">奇遇</button>
         <button class="tab" data-view="log">日志</button>
       </nav>
       <div id="tabContent"></div>
